@@ -778,6 +778,7 @@ invoice_manager_autogen/timestamp: /Applications/Xcode.app/Contents/Developer/Pl
   /opt/homebrew/Cellar/qtbase/6.10.1/lib/QtCore.framework/Versions/A/Headers/QSize \
   /opt/homebrew/Cellar/qtbase/6.10.1/lib/QtCore.framework/Versions/A/Headers/QSizeF \
   /opt/homebrew/Cellar/qtbase/6.10.1/lib/QtCore.framework/Versions/A/Headers/QStandardPaths \
+  /opt/homebrew/Cellar/qtbase/6.10.1/lib/QtCore.framework/Versions/A/Headers/QUrl \
   /opt/homebrew/Cellar/qtbase/6.10.1/lib/QtCore.framework/Versions/A/Headers/QUuid \
   /opt/homebrew/Cellar/qtbase/6.10.1/lib/QtCore.framework/Versions/A/Headers/q17memory.h \
   /opt/homebrew/Cellar/qtbase/6.10.1/lib/QtCore.framework/Versions/A/Headers/q20functional.h \
@@ -933,6 +934,7 @@ invoice_manager_autogen/timestamp: /Applications/Xcode.app/Contents/Developer/Pl
   /opt/homebrew/Cellar/qtbase/6.10.1/lib/QtCore.framework/Versions/A/Headers/qxptype_traits.h \
   /opt/homebrew/Cellar/qtbase/6.10.1/lib/QtCore.framework/Versions/A/Headers/qyieldcpu.h \
   /opt/homebrew/Cellar/qtbase/6.10.1/lib/QtGui.framework/Versions/A/Headers/QColor \
+  /opt/homebrew/Cellar/qtbase/6.10.1/lib/QtGui.framework/Versions/A/Headers/QDesktopServices \
   /opt/homebrew/Cellar/qtbase/6.10.1/lib/QtGui.framework/Versions/A/Headers/QFont \
   /opt/homebrew/Cellar/qtbase/6.10.1/lib/QtGui.framework/Versions/A/Headers/QPaintEvent \
   /opt/homebrew/Cellar/qtbase/6.10.1/lib/QtGui.framework/Versions/A/Headers/QPainter \
@@ -944,6 +946,7 @@ invoice_manager_autogen/timestamp: /Applications/Xcode.app/Contents/Developer/Pl
   /opt/homebrew/Cellar/qtbase/6.10.1/lib/QtGui.framework/Versions/A/Headers/qbrush.h \
   /opt/homebrew/Cellar/qtbase/6.10.1/lib/QtGui.framework/Versions/A/Headers/qcolor.h \
   /opt/homebrew/Cellar/qtbase/6.10.1/lib/QtGui.framework/Versions/A/Headers/qcursor.h \
+  /opt/homebrew/Cellar/qtbase/6.10.1/lib/QtGui.framework/Versions/A/Headers/qdesktopservices.h \
   /opt/homebrew/Cellar/qtbase/6.10.1/lib/QtGui.framework/Versions/A/Headers/qevent.h \
   /opt/homebrew/Cellar/qtbase/6.10.1/lib/QtGui.framework/Versions/A/Headers/qeventpoint.h \
   /opt/homebrew/Cellar/qtbase/6.10.1/lib/QtGui.framework/Versions/A/Headers/qfont.h \
@@ -2153,6 +2156,8 @@ invoice_manager_autogen/timestamp: /Applications/Xcode.app/Contents/Developer/Pl
 
 /opt/homebrew/Cellar/qtbase/6.10.1/lib/QtCore.framework/Versions/A/Headers/QUuid:
 
+/opt/homebrew/Cellar/qtbase/6.10.1/lib/QtCore.framework/Versions/A/Headers/QUrl:
+
 /opt/homebrew/lib/cmake/Qt6Gui/Qt6GuiTargets.cmake:
 
 /opt/homebrew/Cellar/qtbase/6.10.1/lib/QtCore.framework/Versions/A/Headers/QRegularExpression:
@@ -2206,6 +2211,8 @@ invoice_manager_autogen/timestamp: /Applications/Xcode.app/Contents/Developer/Pl
 /opt/homebrew/Cellar/qtbase/6.10.1/lib/QtGui.framework/Versions/A/Headers/qpixelformat.h:
 
 /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/sys/types.h:
+
+/opt/homebrew/Cellar/qtbase/6.10.1/lib/QtGui.framework/Versions/A/Headers/qdesktopservices.h:
 
 /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/c++/v1/__new/interference_size.h:
 
@@ -2396,10 +2403,6 @@ invoice_manager_autogen/moc_predefs.h:
 /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/sys/_types/_fsblkcnt_t.h:
 
 /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/c++/v1/functional:
-
-/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/sys/_types/_in_addr_t.h:
-
-/opt/homebrew/Cellar/qtbase/6.10.1/lib/QtCore.framework/Versions/A/Headers/qatomic_cxx11.h:
 
 /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/c++/v1/__fwd/streambuf.h:
 
@@ -2638,6 +2641,10 @@ invoice_manager_autogen/moc_predefs.h:
 /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/c++/v1/__type_traits/is_trivially_copyable.h:
 
 /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/c++/v1/__type_traits/is_trivially_assignable.h:
+
+/opt/homebrew/Cellar/qtbase/6.10.1/lib/QtCore.framework/Versions/A/Headers/qatomic_cxx11.h:
+
+/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/sys/_types/_in_addr_t.h:
 
 /opt/homebrew/lib/cmake/Qt6/QtPublicGitHelpers.cmake:
 
@@ -3004,6 +3011,8 @@ invoice_manager_autogen/moc_predefs.h:
 /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/c++/v1/__memory/temp_value.h:
 
 /opt/homebrew/Cellar/qtbase/6.10.1/lib/QtGui.framework/Versions/A/Headers/qtextcursor.h:
+
+/opt/homebrew/Cellar/qtbase/6.10.1/lib/QtGui.framework/Versions/A/Headers/QDesktopServices:
 
 /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/c++/v1/__algorithm/remove_copy_if.h:
 

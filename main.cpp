@@ -41,6 +41,8 @@
 #include <QDialogButtonBox>
 #include <QInputDialog>
 #include <QScrollBar>
+#include <QDesktopServices>
+#include <QUrl>
 #include <pugixml.hpp>
 
 // Invoice data structure
@@ -1835,6 +1837,166 @@ private:
         }
         statusLabel->setStyleSheet(QString("font-size: 10px; color: %1; background-color: %2; padding: 4px 10px; border-radius: 10px; font-weight: 500;").arg(statusColor).arg(statusBg));
 
+        // ===== PDF Preview Section =====
+        QFrame* pdfFrame = new QFrame;
+        pdfFrame->setStyleSheet("background-color: white; border: none; border-radius: 8px;");
+        QVBoxLayout* pdfLayout = new QVBoxLayout(pdfFrame);
+        pdfLayout->setContentsMargins(16, 16, 16, 16);
+
+        QLabel* pdfTitle = new QLabel("PDF 预览");
+        pdfTitle->setStyleSheet("font-size: 14px; font-weight: bold; color: #1D1D1F; margin-bottom: 8px;");
+        pdfLayout->addWidget(pdfTitle);
+
+        // PDF preview label
+        pdfPreviewLabel = new QLabel;
+        pdfPreviewLabel->setMinimumHeight(400);
+        pdfPreviewLabel->setAlignment(Qt::AlignCenter);
+        pdfPreviewLabel->setStyleSheet("background-color: #F6F6F6; border: none;");
+
+        // Try to generate PDF preview
+        if (!invoice.filePath.isEmpty() && QFile::exists(invoice.filePath)) {
+            // Use pdftoppm to convert first page to image
+            QString tempImageBase = QDir::tempPath() + "/invoice_preview_" + QString::number(invoice.id);
+            QString tempImage = tempImageBase + ".png";
+
+            // Remove existing temp file if any
+            QFile::remove(tempImage);
+
+            QProcess process;
+            QStringList args;
+            args << "-png" << "-f" << "1" << "-l" << "1" << "-singlefile" << invoice.filePath << tempImageBase;
+            process.start("pdftoppm", args);
+
+            bool success = process.waitForFinished(15000);
+            int exitCode = process.exitCode();
+
+            if (success && exitCode == 0 && QFile::exists(tempImage)) {
+                QPixmap pixmap(tempImage);
+                if (!pixmap.isNull()) {
+                    // Scale to fit width while maintaining aspect ratio
+                    int maxWidth = detailScrollArea->width() - 100;
+                    if (maxWidth < 400) maxWidth = 400;
+                    if (pixmap.width() > maxWidth) {
+                        pixmap = pixmap.scaledToWidth(maxWidth, Qt::SmoothTransformation);
+                    }
+                    pdfPreviewLabel->setPixmap(pixmap);
+                } else {
+                    pdfPreviewLabel->setText("无法加载 PDF 预览图像");
+                }
+                // Clean up temp file
+                QFile::remove(tempImage);
+            } else {
+                QString errorMsg = QString("PDF 预览生成失败 (exit: %1)\n%2")
+                    .arg(exitCode)
+                    .arg(QString::fromUtf8(process.readAllStandardError()));
+                pdfPreviewLabel->setText(errorMsg);
+                qDebug() << "pdftoppm failed:" << errorMsg;
+            }
+        } else {
+            pdfPreviewLabel->setText("PDF 文件不存在: " + invoice.filePath);
+        }
+
+        pdfLayout->addWidget(pdfPreviewLabel);
+
+        // Add open PDF button
+        QPushButton* openPdfButton = new QPushButton("用默认程序打开 PDF");
+        openPdfButton->setStyleSheet("background-color: #007AFF; color: white; border: none; border-radius: 6px; padding: 8px 16px; font-size: 13px;");
+        connect(openPdfButton, &QPushButton::clicked, [invoice]() {
+            if (!invoice.filePath.isEmpty() && QFile::exists(invoice.filePath)) {
+                QDesktopServices::openUrl(QUrl::fromLocalFile(invoice.filePath));
+            }
+        });
+        pdfLayout->addWidget(openPdfButton, 0, Qt::AlignCenter);
+
+        detailContentLayout->addWidget(pdfFrame);
+
+        // ===== Editable Metadata Section =====
+        QFrame* metadataFrame = new QFrame;
+        metadataFrame->setStyleSheet("background-color: white; border: none; border-radius: 8px;");
+        QVBoxLayout* metadataLayout = new QVBoxLayout(metadataFrame);
+        metadataLayout->setContentsMargins(24, 24, 24, 24);
+
+        QLabel* metaTitle = new QLabel("发票元数据 (可编辑)");
+        metaTitle->setStyleSheet("font-size: 16px; font-weight: bold; color: #1D1D1F; margin-bottom: 16px;");
+        metadataLayout->addWidget(metaTitle);
+
+        // Create form layout for editable fields
+        QFormLayout* formLayout = new QFormLayout;
+        formLayout->setSpacing(12);
+        formLayout->setLabelAlignment(Qt::AlignLeft);
+        formLayout->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
+
+        // Create and populate editable fields
+        editInvoiceNumber = new QLineEdit(invoice.invoiceNumber);
+        editInvoiceDate = new QLineEdit(invoice.invoiceDate);
+        editPayerName = new QLineEdit(invoice.payerName);
+        editPayerTaxId = new QLineEdit(invoice.payerTaxId);
+        editPayeeName = new QLineEdit(invoice.payeeName);
+        editPayeeTaxId = new QLineEdit(invoice.payeeTaxId);
+        editProjectName = new QLineEdit(invoice.projectName);
+
+        editAmount = new QDoubleSpinBox;
+        editAmount->setMaximum(999999999.99);
+        editAmount->setDecimals(2);
+        editAmount->setPrefix("¥ ");
+        editAmount->setValue(invoice.amount);
+
+        editTaxRate = new QDoubleSpinBox;
+        editTaxRate->setMaximum(100);
+        editTaxRate->setDecimals(2);
+        editTaxRate->setSuffix("%");
+        editTaxRate->setValue(invoice.taxRate);
+
+        editTaxAmount = new QDoubleSpinBox;
+        editTaxAmount->setMaximum(999999.99);
+        editTaxAmount->setDecimals(2);
+        editTaxAmount->setPrefix("¥ ");
+        editTaxAmount->setValue(invoice.taxAmount);
+
+        // Style the input fields
+        QString inputStyle = "QLineEdit, QDoubleSpinBox { background-color: #F6F6F6; border: none; border-radius: 6px; padding: 8px 12px; font-size: 13px; }"
+                            "QLineEdit:focus, QDoubleSpinBox:focus { background-color: white; }";
+        editInvoiceNumber->setStyleSheet(inputStyle);
+        editInvoiceDate->setStyleSheet(inputStyle);
+        editPayerName->setStyleSheet(inputStyle);
+        editPayerTaxId->setStyleSheet(inputStyle);
+        editPayeeName->setStyleSheet(inputStyle);
+        editPayeeTaxId->setStyleSheet(inputStyle);
+        editProjectName->setStyleSheet(inputStyle);
+        editAmount->setStyleSheet(inputStyle);
+        editTaxRate->setStyleSheet(inputStyle);
+        editTaxAmount->setStyleSheet(inputStyle);
+
+        // Add fields to form
+        formLayout->addRow("发票号码:", editInvoiceNumber);
+        formLayout->addRow("开票日期:", editInvoiceDate);
+        formLayout->addRow("购买方名称:", editPayerName);
+        formLayout->addRow("购买方税号:", editPayerTaxId);
+        formLayout->addRow("销售方名称:", editPayeeName);
+        formLayout->addRow("销售方税号:", editPayeeTaxId);
+        formLayout->addRow("项目名称:", editProjectName);
+        formLayout->addRow("金额:", editAmount);
+        formLayout->addRow("税率:", editTaxRate);
+        formLayout->addRow("税额:", editTaxAmount);
+
+        metadataLayout->addLayout(formLayout);
+
+        // Save button
+        QPushButton* saveButton = new QPushButton("保存修改");
+        saveButton->setStyleSheet("background-color: #34C759; color: white; border: none; border-radius: 6px; padding: 12px 24px; font-size: 14px; font-weight: 500;");
+        saveButton->setCursor(Qt::PointingHandCursor);
+        connect(saveButton, &QPushButton::clicked, this, &InvoiceManagerWindow::onSaveInvoiceChanges);
+        metadataLayout->addWidget(saveButton, 0, Qt::AlignCenter);
+
+        detailContentLayout->addWidget(metadataFrame);
+        detailContentLayout->addStretch();
+
+        // Scroll to top
+        detailScrollArea->verticalScrollBar()->setValue(0);
+    }
+
+    // Keep the old paper view code for reference (not used)
+    void _oldUpdateDetailView_PaperStyle(const Invoice& invoice) {
         // Create paper
         QFrame* paper = new QFrame;
         paper->setStyleSheet("background-color: white; border: 1px solid #D1D1D1; border-radius: 8px;");
@@ -2100,6 +2262,67 @@ private:
     QVBoxLayout* detailContentLayout;
     QHash<QWidget*, int> invoiceItemMap;
     int currentInvoiceId = -1;
+
+    // Editable fields for invoice metadata
+    QLineEdit* editInvoiceNumber;
+    QLineEdit* editInvoiceDate;
+    QLineEdit* editPayerName;
+    QLineEdit* editPayerTaxId;
+    QLineEdit* editPayeeName;
+    QLineEdit* editPayeeTaxId;
+    QLineEdit* editProjectName;
+    QDoubleSpinBox* editAmount;
+    QDoubleSpinBox* editTaxRate;
+    QDoubleSpinBox* editTaxAmount;
+    QLabel* pdfPreviewLabel;
+
+private slots:
+    void onSaveInvoiceChanges() {
+        if (currentInvoiceId <= 0) return;
+
+        Invoice invoice = db.getInvoiceById(currentInvoiceId);
+        if (invoice.id <= 0) return;
+
+        // Update fields from edit controls
+        invoice.invoiceNumber = editInvoiceNumber->text();
+        invoice.invoiceDate = editInvoiceDate->text();
+        invoice.payerName = editPayerName->text();
+        invoice.payerTaxId = editPayerTaxId->text();
+        invoice.payeeName = editPayeeName->text();
+        invoice.payeeTaxId = editPayeeTaxId->text();
+        invoice.projectName = editProjectName->text();
+        invoice.amount = editAmount->value();
+        invoice.taxRate = editTaxRate->value();
+        invoice.taxAmount = editTaxAmount->value();
+
+        // Save to database
+        QSqlQuery query;
+        query.prepare("UPDATE invoices SET invoice_number = :invoice_number, invoice_date = :invoice_date, "
+                      "payer_name = :payer_name, payer_tax_id = :payer_tax_id, "
+                      "payee_name = :payee_name, payee_tax_id = :payee_tax_id, "
+                      "project_name = :project_name, amount = :amount, "
+                      "tax_rate = :tax_rate, tax_amount = :tax_amount "
+                      "WHERE id = :id");
+        query.bindValue(":invoice_number", invoice.invoiceNumber);
+        query.bindValue(":invoice_date", invoice.invoiceDate);
+        query.bindValue(":payer_name", invoice.payerName);
+        query.bindValue(":payer_tax_id", invoice.payerTaxId);
+        query.bindValue(":payee_name", invoice.payeeName);
+        query.bindValue(":payee_tax_id", invoice.payeeTaxId);
+        query.bindValue(":project_name", invoice.projectName);
+        query.bindValue(":amount", invoice.amount);
+        query.bindValue(":tax_rate", QString("%1%").arg(invoice.taxRate));
+        query.bindValue(":tax_amount", invoice.taxAmount);
+        query.bindValue(":id", invoice.id);
+
+        if (query.exec()) {
+            QMessageBox::information(this, "保存成功", "发票信息已更新。");
+            refreshInvoiceList();
+            updateDetailView(invoice);
+        } else {
+            QMessageBox::warning(this, "保存失败", "无法保存修改：" + query.lastError().text());
+        }
+    }
 };
 
 int main(int argc, char* argv[]) {

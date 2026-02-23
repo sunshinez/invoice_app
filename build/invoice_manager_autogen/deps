@@ -776,6 +776,7 @@ invoice_manager_autogen/timestamp: \
 	/opt/homebrew/Cellar/qtbase/6.10.1/lib/QtCore.framework/Versions/A/Headers/QSize \
 	/opt/homebrew/Cellar/qtbase/6.10.1/lib/QtCore.framework/Versions/A/Headers/QSizeF \
 	/opt/homebrew/Cellar/qtbase/6.10.1/lib/QtCore.framework/Versions/A/Headers/QStandardPaths \
+	/opt/homebrew/Cellar/qtbase/6.10.1/lib/QtCore.framework/Versions/A/Headers/QUrl \
 	/opt/homebrew/Cellar/qtbase/6.10.1/lib/QtCore.framework/Versions/A/Headers/QUuid \
 	/opt/homebrew/Cellar/qtbase/6.10.1/lib/QtCore.framework/Versions/A/Headers/q17memory.h \
 	/opt/homebrew/Cellar/qtbase/6.10.1/lib/QtCore.framework/Versions/A/Headers/q20functional.h \
@@ -931,6 +932,7 @@ invoice_manager_autogen/timestamp: \
 	/opt/homebrew/Cellar/qtbase/6.10.1/lib/QtCore.framework/Versions/A/Headers/qxptype_traits.h \
 	/opt/homebrew/Cellar/qtbase/6.10.1/lib/QtCore.framework/Versions/A/Headers/qyieldcpu.h \
 	/opt/homebrew/Cellar/qtbase/6.10.1/lib/QtGui.framework/Versions/A/Headers/QColor \
+	/opt/homebrew/Cellar/qtbase/6.10.1/lib/QtGui.framework/Versions/A/Headers/QDesktopServices \
 	/opt/homebrew/Cellar/qtbase/6.10.1/lib/QtGui.framework/Versions/A/Headers/QFont \
 	/opt/homebrew/Cellar/qtbase/6.10.1/lib/QtGui.framework/Versions/A/Headers/QPaintEvent \
 	/opt/homebrew/Cellar/qtbase/6.10.1/lib/QtGui.framework/Versions/A/Headers/QPainter \
@@ -942,6 +944,7 @@ invoice_manager_autogen/timestamp: \
 	/opt/homebrew/Cellar/qtbase/6.10.1/lib/QtGui.framework/Versions/A/Headers/qbrush.h \
 	/opt/homebrew/Cellar/qtbase/6.10.1/lib/QtGui.framework/Versions/A/Headers/qcolor.h \
 	/opt/homebrew/Cellar/qtbase/6.10.1/lib/QtGui.framework/Versions/A/Headers/qcursor.h \
+	/opt/homebrew/Cellar/qtbase/6.10.1/lib/QtGui.framework/Versions/A/Headers/qdesktopservices.h \
 	/opt/homebrew/Cellar/qtbase/6.10.1/lib/QtGui.framework/Versions/A/Headers/qevent.h \
 	/opt/homebrew/Cellar/qtbase/6.10.1/lib/QtGui.framework/Versions/A/Headers/qeventpoint.h \
 	/opt/homebrew/Cellar/qtbase/6.10.1/lib/QtGui.framework/Versions/A/Headers/qfont.h \

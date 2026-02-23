@@ -779,6 +779,7 @@
  /opt/homebrew/Cellar/qtbase/6.10.1/lib/QtCore.framework/Versions/A/Headers/QSize
  /opt/homebrew/Cellar/qtbase/6.10.1/lib/QtCore.framework/Versions/A/Headers/QSizeF
  /opt/homebrew/Cellar/qtbase/6.10.1/lib/QtCore.framework/Versions/A/Headers/QStandardPaths
+ /opt/homebrew/Cellar/qtbase/6.10.1/lib/QtCore.framework/Versions/A/Headers/QUrl
  /opt/homebrew/Cellar/qtbase/6.10.1/lib/QtCore.framework/Versions/A/Headers/QUuid
  /opt/homebrew/Cellar/qtbase/6.10.1/lib/QtCore.framework/Versions/A/Headers/q17memory.h
  /opt/homebrew/Cellar/qtbase/6.10.1/lib/QtCore.framework/Versions/A/Headers/q20functional.h
@@ -934,6 +935,7 @@
  /opt/homebrew/Cellar/qtbase/6.10.1/lib/QtCore.framework/Versions/A/Headers/qxptype_traits.h
  /opt/homebrew/Cellar/qtbase/6.10.1/lib/QtCore.framework/Versions/A/Headers/qyieldcpu.h
  /opt/homebrew/Cellar/qtbase/6.10.1/lib/QtGui.framework/Versions/A/Headers/QColor
+ /opt/homebrew/Cellar/qtbase/6.10.1/lib/QtGui.framework/Versions/A/Headers/QDesktopServices
  /opt/homebrew/Cellar/qtbase/6.10.1/lib/QtGui.framework/Versions/A/Headers/QFont
  /opt/homebrew/Cellar/qtbase/6.10.1/lib/QtGui.framework/Versions/A/Headers/QPaintEvent
  /opt/homebrew/Cellar/qtbase/6.10.1/lib/QtGui.framework/Versions/A/Headers/QPainter
@@ -945,6 +947,7 @@
  /opt/homebrew/Cellar/qtbase/6.10.1/lib/QtGui.framework/Versions/A/Headers/qbrush.h
  /opt/homebrew/Cellar/qtbase/6.10.1/lib/QtGui.framework/Versions/A/Headers/qcolor.h
  /opt/homebrew/Cellar/qtbase/6.10.1/lib/QtGui.framework/Versions/A/Headers/qcursor.h
+ /opt/homebrew/Cellar/qtbase/6.10.1/lib/QtGui.framework/Versions/A/Headers/qdesktopservices.h
  /opt/homebrew/Cellar/qtbase/6.10.1/lib/QtGui.framework/Versions/A/Headers/qevent.h
  /opt/homebrew/Cellar/qtbase/6.10.1/lib/QtGui.framework/Versions/A/Headers/qeventpoint.h
  /opt/homebrew/Cellar/qtbase/6.10.1/lib/QtGui.framework/Versions/A/Headers/qfont.h
@@ -2259,6 +2262,7 @@ CMakeFiles/invoice_manager.dir/main.cpp.o
  /opt/homebrew/lib/QtCore.framework/Headers/QSize
  /opt/homebrew/lib/QtCore.framework/Headers/QSizeF
  /opt/homebrew/lib/QtCore.framework/Headers/QStandardPaths
+ /opt/homebrew/lib/QtCore.framework/Headers/QUrl
  /opt/homebrew/lib/QtCore.framework/Headers/QUuid
  /opt/homebrew/lib/QtCore.framework/Headers/q17memory.h
  /opt/homebrew/lib/QtCore.framework/Headers/q20algorithm.h
@@ -2417,6 +2421,7 @@ CMakeFiles/invoice_manager.dir/main.cpp.o
  /opt/homebrew/lib/QtCore.framework/Headers/qxptype_traits.h
  /opt/homebrew/lib/QtCore.framework/Headers/qyieldcpu.h
  /opt/homebrew/lib/QtGui.framework/Headers/QColor
+ /opt/homebrew/lib/QtGui.framework/Headers/QDesktopServices
  /opt/homebrew/lib/QtGui.framework/Headers/QFont
  /opt/homebrew/lib/QtGui.framework/Headers/QPaintEvent
  /opt/homebrew/lib/QtGui.framework/Headers/QPainter
@@ -2428,6 +2433,7 @@ CMakeFiles/invoice_manager.dir/main.cpp.o
  /opt/homebrew/lib/QtGui.framework/Headers/qbrush.h
  /opt/homebrew/lib/QtGui.framework/Headers/qcolor.h
  /opt/homebrew/lib/QtGui.framework/Headers/qcursor.h
+ /opt/homebrew/lib/QtGui.framework/Headers/qdesktopservices.h
  /opt/homebrew/lib/QtGui.framework/Headers/qevent.h
  /opt/homebrew/lib/QtGui.framework/Headers/qeventpoint.h
  /opt/homebrew/lib/QtGui.framework/Headers/qfont.h

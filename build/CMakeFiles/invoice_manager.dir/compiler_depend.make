@@ -778,6 +778,7 @@ invoice_manager_autogen/timestamp: /Applications/Xcode.app/Contents/Developer/Pl
   /opt/homebrew/Cellar/qtbase/6.10.1/lib/QtCore.framework/Versions/A/Headers/QSize \
   /opt/homebrew/Cellar/qtbase/6.10.1/lib/QtCore.framework/Versions/A/Headers/QSizeF \
   /opt/homebrew/Cellar/qtbase/6.10.1/lib/QtCore.framework/Versions/A/Headers/QStandardPaths \
+  /opt/homebrew/Cellar/qtbase/6.10.1/lib/QtCore.framework/Versions/A/Headers/QUrl \
   /opt/homebrew/Cellar/qtbase/6.10.1/lib/QtCore.framework/Versions/A/Headers/QUuid \
   /opt/homebrew/Cellar/qtbase/6.10.1/lib/QtCore.framework/Versions/A/Headers/q17memory.h \
   /opt/homebrew/Cellar/qtbase/6.10.1/lib/QtCore.framework/Versions/A/Headers/q20functional.h \
@@ -933,6 +934,7 @@ invoice_manager_autogen/timestamp: /Applications/Xcode.app/Contents/Developer/Pl
   /opt/homebrew/Cellar/qtbase/6.10.1/lib/QtCore.framework/Versions/A/Headers/qxptype_traits.h \
   /opt/homebrew/Cellar/qtbase/6.10.1/lib/QtCore.framework/Versions/A/Headers/qyieldcpu.h \
   /opt/homebrew/Cellar/qtbase/6.10.1/lib/QtGui.framework/Versions/A/Headers/QColor \
+  /opt/homebrew/Cellar/qtbase/6.10.1/lib/QtGui.framework/Versions/A/Headers/QDesktopServices \
   /opt/homebrew/Cellar/qtbase/6.10.1/lib/QtGui.framework/Versions/A/Headers/QFont \
   /opt/homebrew/Cellar/qtbase/6.10.1/lib/QtGui.framework/Versions/A/Headers/QPaintEvent \
   /opt/homebrew/Cellar/qtbase/6.10.1/lib/QtGui.framework/Versions/A/Headers/QPainter \
@@ -944,6 +946,7 @@ invoice_manager_autogen/timestamp: /Applications/Xcode.app/Contents/Developer/Pl
   /opt/homebrew/Cellar/qtbase/6.10.1/lib/QtGui.framework/Versions/A/Headers/qbrush.h \
   /opt/homebrew/Cellar/qtbase/6.10.1/lib/QtGui.framework/Versions/A/Headers/qcolor.h \
   /opt/homebrew/Cellar/qtbase/6.10.1/lib/QtGui.framework/Versions/A/Headers/qcursor.h \
+  /opt/homebrew/Cellar/qtbase/6.10.1/lib/QtGui.framework/Versions/A/Headers/qdesktopservices.h \
   /opt/homebrew/Cellar/qtbase/6.10.1/lib/QtGui.framework/Versions/A/Headers/qevent.h \
   /opt/homebrew/Cellar/qtbase/6.10.1/lib/QtGui.framework/Versions/A/Headers/qeventpoint.h \
   /opt/homebrew/Cellar/qtbase/6.10.1/lib/QtGui.framework/Versions/A/Headers/qfont.h \
@@ -2256,6 +2259,7 @@ CMakeFiles/invoice_manager.dir/main.cpp.o: /Users/hongyinzhang/project/invoice_a
   /opt/homebrew/lib/QtCore.framework/Headers/QSize \
   /opt/homebrew/lib/QtCore.framework/Headers/QSizeF \
   /opt/homebrew/lib/QtCore.framework/Headers/QStandardPaths \
+  /opt/homebrew/lib/QtCore.framework/Headers/QUrl \
   /opt/homebrew/lib/QtCore.framework/Headers/QUuid \
   /opt/homebrew/lib/QtCore.framework/Headers/q17memory.h \
   /opt/homebrew/lib/QtCore.framework/Headers/q20algorithm.h \
@@ -2414,6 +2418,7 @@ CMakeFiles/invoice_manager.dir/main.cpp.o: /Users/hongyinzhang/project/invoice_a
   /opt/homebrew/lib/QtCore.framework/Headers/qxptype_traits.h \
   /opt/homebrew/lib/QtCore.framework/Headers/qyieldcpu.h \
   /opt/homebrew/lib/QtGui.framework/Headers/QColor \
+  /opt/homebrew/lib/QtGui.framework/Headers/QDesktopServices \
   /opt/homebrew/lib/QtGui.framework/Headers/QFont \
   /opt/homebrew/lib/QtGui.framework/Headers/QPaintEvent \
   /opt/homebrew/lib/QtGui.framework/Headers/QPainter \
@@ -2425,6 +2430,7 @@ CMakeFiles/invoice_manager.dir/main.cpp.o: /Users/hongyinzhang/project/invoice_a
   /opt/homebrew/lib/QtGui.framework/Headers/qbrush.h \
   /opt/homebrew/lib/QtGui.framework/Headers/qcolor.h \
   /opt/homebrew/lib/QtGui.framework/Headers/qcursor.h \
+  /opt/homebrew/lib/QtGui.framework/Headers/qdesktopservices.h \
   /opt/homebrew/lib/QtGui.framework/Headers/qevent.h \
   /opt/homebrew/lib/QtGui.framework/Headers/qeventpoint.h \
   /opt/homebrew/lib/QtGui.framework/Headers/qfont.h \
@@ -2695,6 +2701,8 @@ CMakeFiles/invoice_manager.dir/main.cpp.o: /Users/hongyinzhang/project/invoice_a
 
 /opt/homebrew/lib/QtGui.framework/Headers/qeventpoint.h:
 
+/opt/homebrew/lib/QtGui.framework/Headers/qdesktopservices.h:
+
 /opt/homebrew/lib/QtGui.framework/Headers/qbrush.h:
 
 /opt/homebrew/lib/QtGui.framework/Headers/qaction.h:
@@ -2706,6 +2714,8 @@ CMakeFiles/invoice_manager.dir/main.cpp.o: /Users/hongyinzhang/project/invoice_a
 /opt/homebrew/lib/QtGui.framework/Headers/QPaintEvent:
 
 /opt/homebrew/lib/QtGui.framework/Headers/QFont:
+
+/opt/homebrew/lib/QtGui.framework/Headers/QDesktopServices:
 
 /opt/homebrew/lib/QtCore.framework/Headers/qyieldcpu.h:
 
@@ -2781,6 +2791,8 @@ CMakeFiles/invoice_manager.dir/main.cpp.o: /Users/hongyinzhang/project/invoice_a
 
 /opt/homebrew/lib/QtCore.framework/Headers/qscopeguard.h:
 
+/opt/homebrew/lib/QtCore.framework/Headers/qscopedpointer.h:
+
 /opt/homebrew/lib/QtCore.framework/Headers/qregularexpression.h:
 
 /opt/homebrew/lib/QtCore.framework/Headers/qrefcount.h:
@@ -2832,8 +2844,6 @@ CMakeFiles/invoice_manager.dir/main.cpp.o: /Users/hongyinzhang/project/invoice_a
 /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/xlocale.h:
 
 /opt/homebrew/lib/QtCore.framework/Headers/qgenericatomic.h:
-
-/opt/homebrew/lib/QtCore.framework/Headers/qfunctionpointer.h:
 
 /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/c++/v1/__type_traits/is_final.h:
 
@@ -3561,6 +3571,8 @@ invoice_manager_autogen/mocs_compilation.cpp:
 
 /opt/homebrew/lib/cmake/Qt6/QtPublicSbomAttributionHelpers.cmake:
 
+/opt/homebrew/lib/QtCore.framework/Headers/QUrl:
+
 /opt/homebrew/lib/cmake/Qt6/QtPublicPluginHelpers_v2.cmake:
 
 /opt/homebrew/lib/cmake/Qt6/QtPublicExternalProjectHelpers.cmake:
@@ -4041,6 +4053,8 @@ invoice_manager_autogen/mocs_compilation.cpp:
 
 /opt/homebrew/Cellar/qtbase/6.10.1/lib/QtCore.framework/Versions/A/Headers/qiodevice.h:
 
+/opt/homebrew/Cellar/qtbase/6.10.1/lib/QtCore.framework/Versions/A/Headers/QUrl:
+
 /opt/homebrew/Cellar/qtbase/6.10.1/lib/QtCore.framework/Versions/A/Headers/qhash.h:
 
 /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/c++/v1/__math/special_functions.h:
@@ -4167,6 +4181,8 @@ invoice_manager_autogen/mocs_compilation.cpp:
 
 /opt/homebrew/Cellar/qtbase/6.10.1/lib/QtCore.framework/Versions/A/Headers/q20utility.h:
 
+/opt/homebrew/lib/QtCore.framework/Headers/qfunctionpointer.h:
+
 /opt/homebrew/lib/cmake/Qt6Gui/Qt6GuiTargets.cmake:
 
 /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/c++/v1/__concepts/destructible.h:
@@ -4216,6 +4232,10 @@ invoice_manager_autogen/mocs_compilation.cpp:
 /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/c++/v1/__math/fdim.h:
 
 /opt/homebrew/Cellar/qtbase/6.10.1/lib/QtGui.framework/Versions/A/Headers/qpixelformat.h:
+
+/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/c++/v1/__utility/forward.h:
+
+/opt/homebrew/Cellar/qtbase/6.10.1/lib/QtGui.framework/Versions/A/Headers/qdesktopservices.h:
 
 /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/c++/v1/__type_traits/alignment_of.h:
 
@@ -4452,10 +4472,6 @@ invoice_manager_autogen/moc_predefs.h:
 /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/sys/_types/_fsblkcnt_t.h:
 
 /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/c++/v1/functional:
-
-/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/sys/_types/_in_addr_t.h:
-
-/opt/homebrew/Cellar/qtbase/6.10.1/lib/QtCore.framework/Versions/A/Headers/qatomic_cxx11.h:
 
 /opt/homebrew/lib/QtCore.framework/Headers/qmap.h:
 
@@ -4743,6 +4759,10 @@ invoice_manager_autogen/moc_predefs.h:
 
 /opt/homebrew/Cellar/qtbase/6.10.1/lib/QtCore.framework/Versions/A/Headers/qsharedpointer_impl.h:
 
+/opt/homebrew/Cellar/qtbase/6.10.1/lib/QtCore.framework/Versions/A/Headers/qatomic_cxx11.h:
+
+/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/sys/_types/_in_addr_t.h:
+
 /opt/homebrew/lib/cmake/Qt6/QtPublicGitHelpers.cmake:
 
 /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/c++/v1/__type_traits/is_trivial.h:
@@ -4953,8 +4973,6 @@ invoice_manager_autogen/moc_predefs.h:
 
 /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/c++/v1/__tuple/tuple_like_no_subrange.h:
 
-/opt/homebrew/lib/QtCore.framework/Headers/qscopedpointer.h:
-
 /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/c++/v1/__tuple/tuple_indices.h:
 
 /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/c++/v1/__iterator/iterator_traits.h:
@@ -5120,6 +5138,8 @@ invoice_manager_autogen/moc_predefs.h:
 /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/c++/v1/__memory/temp_value.h:
 
 /opt/homebrew/Cellar/qtbase/6.10.1/lib/QtGui.framework/Versions/A/Headers/qtextcursor.h:
+
+/opt/homebrew/Cellar/qtbase/6.10.1/lib/QtGui.framework/Versions/A/Headers/QDesktopServices:
 
 /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/c++/v1/__algorithm/remove_copy_if.h:
 
@@ -5734,8 +5754,6 @@ CMakeFiles/4.2.3/CMakeSystem.cmake:
 /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/c++/v1/__bit/popcount.h:
 
 /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/sys/_types/_fd_zero.h:
-
-/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/c++/v1/__utility/forward.h:
 
 /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/c++/v1/__algorithm/for_each_segment.h:
 
