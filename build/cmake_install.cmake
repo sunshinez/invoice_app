@@ -1,4 +1,4 @@
-# Install script for directory: /Users/hongyinzhang/project/invoice_app
+# Install script for directory: /Users/hongyinzhang/project/invoice_app_datalist
 
 # Set the install prefix
 if(NOT DEFINED CMAKE_INSTALL_PREFIX)
@@ -40,7 +40,7 @@ endif()
 string(REPLACE ";" "\n" CMAKE_INSTALL_MANIFEST_CONTENT
        "${CMAKE_INSTALL_MANIFEST_FILES}")
 if(CMAKE_INSTALL_LOCAL_ONLY)
-  file(WRITE "/Users/hongyinzhang/project/invoice_app/build/install_local_manifest.txt"
+  file(WRITE "/Users/hongyinzhang/project/invoice_app_datalist/build/install_local_manifest.txt"
      "${CMAKE_INSTALL_MANIFEST_CONTENT}")
 endif()
 if(CMAKE_INSTALL_COMPONENT)
@@ -56,6 +56,6 @@ else()
 endif()
 
 if(NOT CMAKE_INSTALL_LOCAL_ONLY)
-  file(WRITE "/Users/hongyinzhang/project/invoice_app/build/${CMAKE_INSTALL_MANIFEST}"
+  file(WRITE "/Users/hongyinzhang/project/invoice_app_datalist/build/${CMAKE_INSTALL_MANIFEST}"
      "${CMAKE_INSTALL_MANIFEST_CONTENT}")
 endif()

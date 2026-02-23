@@ -1,15 +1,15 @@
 {
-	"BUILD_DIR" : "/Users/hongyinzhang/project/invoice_app/build/invoice_manager_autogen",
-	"CMAKE_BINARY_DIR" : "/Users/hongyinzhang/project/invoice_app/build",
-	"CMAKE_CURRENT_BINARY_DIR" : "/Users/hongyinzhang/project/invoice_app/build",
-	"CMAKE_CURRENT_SOURCE_DIR" : "/Users/hongyinzhang/project/invoice_app",
+	"BUILD_DIR" : "/Users/hongyinzhang/project/invoice_app_datalist/build/invoice_manager_autogen",
+	"CMAKE_BINARY_DIR" : "/Users/hongyinzhang/project/invoice_app_datalist/build",
+	"CMAKE_CURRENT_BINARY_DIR" : "/Users/hongyinzhang/project/invoice_app_datalist/build",
+	"CMAKE_CURRENT_SOURCE_DIR" : "/Users/hongyinzhang/project/invoice_app_datalist",
 	"CMAKE_EXECUTABLE" : "/opt/homebrew/bin/cmake",
 	"CMAKE_LIST_FILES" : 
 	[
-		"/Users/hongyinzhang/project/invoice_app/CMakeLists.txt",
+		"/Users/hongyinzhang/project/invoice_app_datalist/CMakeLists.txt",
 		"/opt/homebrew/share/cmake/Modules/CMakeDetermineSystem.cmake",
 		"/opt/homebrew/share/cmake/Modules/CMakeSystem.cmake.in",
-		"/Users/hongyinzhang/project/invoice_app/build/CMakeFiles/4.2.3/CMakeSystem.cmake",
+		"/Users/hongyinzhang/project/invoice_app_datalist/build/CMakeFiles/4.2.3/CMakeSystem.cmake",
 		"/opt/homebrew/share/cmake/Modules/CMakeUnixFindMake.cmake",
 		"/opt/homebrew/share/cmake/Modules/CMakeSystemSpecificInitialize.cmake",
 		"/opt/homebrew/share/cmake/Modules/Platform/Darwin-Initialize.cmake",
@@ -64,7 +64,7 @@
 		"/opt/homebrew/share/cmake/Modules/Compiler/IBMCPP-CXX-DetermineVersionInternal.cmake",
 		"/opt/homebrew/share/cmake/Modules/CMakeFindBinUtils.cmake",
 		"/opt/homebrew/share/cmake/Modules/CMakeCXXCompiler.cmake.in",
-		"/Users/hongyinzhang/project/invoice_app/build/CMakeFiles/4.2.3/CMakeCXXCompiler.cmake",
+		"/Users/hongyinzhang/project/invoice_app_datalist/build/CMakeFiles/4.2.3/CMakeCXXCompiler.cmake",
 		"/opt/homebrew/share/cmake/Modules/CMakeSystemSpecificInformation.cmake",
 		"/opt/homebrew/share/cmake/Modules/CMakeGenericSystem.cmake",
 		"/opt/homebrew/share/cmake/Modules/CMakeInitializeConfigs.cmake",
@@ -93,7 +93,7 @@
 		"/opt/homebrew/share/cmake/Modules/CMakeDetermineCompilerSupport.cmake",
 		"/opt/homebrew/share/cmake/Modules/Internal/FeatureTesting.cmake",
 		"/opt/homebrew/share/cmake/Modules/CMakeCXXCompiler.cmake.in",
-		"/Users/hongyinzhang/project/invoice_app/build/CMakeFiles/4.2.3/CMakeCXXCompiler.cmake",
+		"/Users/hongyinzhang/project/invoice_app_datalist/build/CMakeFiles/4.2.3/CMakeCXXCompiler.cmake",
 		"/opt/homebrew/share/cmake/Modules/Internal/CMakeCXXLinkerInformation.cmake",
 		"/opt/homebrew/share/cmake/Modules/Internal/CMakeCommonLinkerInformation.cmake",
 		"/opt/homebrew/share/cmake/Modules/Linker/AppleClang-CXX.cmake",
@@ -429,17 +429,39 @@
 		"/opt/homebrew/lib/cmake/Qt6Widgets/Qt6QMacStylePluginTargets.cmake",
 		"/opt/homebrew/lib/cmake/Qt6Widgets/Qt6QMacStylePluginTargets-release.cmake",
 		"/opt/homebrew/lib/cmake/Qt6Widgets/Qt6QMacStylePluginAdditionalTargetInfo.cmake",
-		"/opt/homebrew/lib/cmake/Qt6Widgets/Qt6WidgetsVersionlessAliasTargets.cmake"
+		"/opt/homebrew/lib/cmake/Qt6Widgets/Qt6WidgetsVersionlessAliasTargets.cmake",
+		"/opt/homebrew/lib/cmake/Qt6Sql/Qt6SqlConfigVersion.cmake",
+		"/opt/homebrew/lib/cmake/Qt6Sql/Qt6SqlConfigVersionImpl.cmake",
+		"/opt/homebrew/lib/cmake/Qt6Sql/Qt6SqlConfig.cmake",
+		"/opt/homebrew/share/cmake/Modules/CMakeFindDependencyMacro.cmake",
+		"/opt/homebrew/lib/cmake/Qt6Sql/Qt6SqlDependencies.cmake",
+		"/opt/homebrew/lib/cmake/Qt6Sql/Qt6SqlTargets.cmake",
+		"/opt/homebrew/lib/cmake/Qt6Sql/Qt6SqlTargets-release.cmake",
+		"/opt/homebrew/lib/cmake/Qt6Sql/Qt6SqlAdditionalTargetInfo.cmake",
+		"/opt/homebrew/lib/cmake/Qt6Sql/Qt6SqlPlugins.cmake",
+		"/opt/homebrew/lib/cmake/Qt6Sql/Qt6QSQLiteDriverPluginConfig.cmake",
+		"/opt/homebrew/share/cmake/Modules/CMakeFindDependencyMacro.cmake",
+		"/opt/homebrew/lib/cmake/Qt6Sql/Qt6QSQLiteDriverPluginTargets.cmake",
+		"/opt/homebrew/lib/cmake/Qt6Sql/Qt6QSQLiteDriverPluginTargets-release.cmake",
+		"/opt/homebrew/lib/cmake/Qt6Sql/Qt6QSQLiteDriverPluginAdditionalTargetInfo.cmake",
+		"/opt/homebrew/lib/cmake/Qt6Sql/Qt6SqlVersionlessAliasTargets.cmake"
 	],
-	"CMAKE_SOURCE_DIR" : "/Users/hongyinzhang/project/invoice_app",
+	"CMAKE_SOURCE_DIR" : "/Users/hongyinzhang/project/invoice_app_datalist",
 	"CROSS_CONFIG" : false,
-	"DEP_FILE" : "/Users/hongyinzhang/project/invoice_app/build/invoice_manager_autogen/deps",
+	"DEP_FILE" : "/Users/hongyinzhang/project/invoice_app_datalist/build/invoice_manager_autogen/deps",
 	"DEP_FILE_RULE_NAME" : "invoice_manager_autogen/timestamp",
 	"HEADERS" : [],
 	"HEADER_EXTENSIONS" : [ "h", "hh", "h++", "hm", "hpp", "hxx", "in", "txx" ],
-	"INCLUDE_DIR" : "/Users/hongyinzhang/project/invoice_app/build/invoice_manager_autogen/include",
-	"MOC_COMPILATION_FILE" : "/Users/hongyinzhang/project/invoice_app/build/invoice_manager_autogen/mocs_compilation.cpp",
-	"MOC_DEFINITIONS" : [ "QT_CORE_LIB", "QT_GUI_LIB", "QT_NO_DEBUG", "QT_WIDGETS_LIB" ],
+	"INCLUDE_DIR" : "/Users/hongyinzhang/project/invoice_app_datalist/build/invoice_manager_autogen/include",
+	"MOC_COMPILATION_FILE" : "/Users/hongyinzhang/project/invoice_app_datalist/build/invoice_manager_autogen/mocs_compilation.cpp",
+	"MOC_DEFINITIONS" : 
+	[
+		"QT_CORE_LIB",
+		"QT_GUI_LIB",
+		"QT_NO_DEBUG",
+		"QT_SQL_LIB",
+		"QT_WIDGETS_LIB"
+	],
 	"MOC_DEPEND_FILTERS" : 
 	[
 		[
@@ -457,6 +479,8 @@
 		"/opt/homebrew/include",
 		"/opt/homebrew/lib/QtGui.framework/Headers",
 		"/opt/homebrew/lib/QtGui.framework",
+		"/opt/homebrew/lib/QtSql.framework/Headers",
+		"/opt/homebrew/lib/QtSql.framework",
 		"/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/c++/v1",
 		"/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/17/include",
 		"/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include",
@@ -482,20 +506,24 @@
 		"-E",
 		"/opt/homebrew/share/cmake/Modules/CMakeCXXCompilerABI.cpp"
 	],
-	"MOC_PREDEFS_FILE" : "/Users/hongyinzhang/project/invoice_app/build/invoice_manager_autogen/moc_predefs.h",
+	"MOC_PREDEFS_FILE" : "/Users/hongyinzhang/project/invoice_app_datalist/build/invoice_manager_autogen/moc_predefs.h",
 	"MOC_RELAXED_MODE" : false,
 	"MOC_SKIP" : [],
 	"MULTI_CONFIG" : false,
 	"PARALLEL" : 10,
-	"PARSE_CACHE_FILE" : "/Users/hongyinzhang/project/invoice_app/build/CMakeFiles/invoice_manager_autogen.dir/ParseCache.txt",
+	"PARSE_CACHE_FILE" : "/Users/hongyinzhang/project/invoice_app_datalist/build/CMakeFiles/invoice_manager_autogen.dir/ParseCache.txt",
 	"QT_MOC_EXECUTABLE" : "/opt/homebrew/share/qt/libexec/moc",
 	"QT_UIC_EXECUTABLE" : "",
 	"QT_VERSION_MAJOR" : 6,
 	"QT_VERSION_MINOR" : 10,
-	"SETTINGS_FILE" : "/Users/hongyinzhang/project/invoice_app/build/CMakeFiles/invoice_manager_autogen.dir/AutogenUsed.txt",
+	"SETTINGS_FILE" : "/Users/hongyinzhang/project/invoice_app_datalist/build/CMakeFiles/invoice_manager_autogen.dir/AutogenUsed.txt",
 	"SOURCES" : 
 	[
-		[ "/Users/hongyinzhang/project/invoice_app/main.cpp", "Mu", null ]
+		[
+			"/Users/hongyinzhang/project/invoice_app_datalist/main.cpp",
+			"Mu",
+			null
+		]
 	],
 	"USE_BETTER_GRAPH" : true,
 	"VERBOSITY" : 0

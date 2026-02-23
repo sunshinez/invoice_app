@@ -5,13 +5,13 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)
 
-find_package(Qt6 REQUIRED COMPONENTS Widgets)
+find_package(Qt6 REQUIRED COMPONENTS Widgets Sql)
 
 add_executable(invoice_manager
     main.cpp
 )
 
-target_link_libraries(invoice_manager PRIVATE Qt6::Widgets)
+target_link_libraries(invoice_manager PRIVATE Qt6::Widgets Qt6::Sql)
 
 # Optional: Enable high DPI scaling
 set_target_properties(invoice_manager PROPERTIES

@@ -53,10 +53,10 @@ RM = /opt/homebrew/bin/cmake -E rm -f
 EQUALS = =
 
 # The top-level source directory on which CMake was run.
-CMAKE_SOURCE_DIR = /Users/hongyinzhang/project/invoice_app
+CMAKE_SOURCE_DIR = /Users/hongyinzhang/project/invoice_app_datalist
 
 # The top-level build directory on which CMake was run.
-CMAKE_BINARY_DIR = /Users/hongyinzhang/project/invoice_app/build
+CMAKE_BINARY_DIR = /Users/hongyinzhang/project/invoice_app_datalist/build
 
 # Include any dependencies generated for this target.
 include CMakeFiles/invoice_manager.dir/depend.make
@@ -71,9 +71,9 @@ include CMakeFiles/invoice_manager.dir/flags.make
 
 invoice_manager_autogen/timestamp: /opt/homebrew/share/qt/libexec/moc
 invoice_manager_autogen/timestamp: CMakeFiles/invoice_manager.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --blue --bold --progress-dir=/Users/hongyinzhang/project/invoice_app/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_1) "Automatic MOC for target invoice_manager"
-	/opt/homebrew/bin/cmake -E cmake_autogen /Users/hongyinzhang/project/invoice_app/build/CMakeFiles/invoice_manager_autogen.dir/AutogenInfo.json ""
-	/opt/homebrew/bin/cmake -E touch /Users/hongyinzhang/project/invoice_app/build/invoice_manager_autogen/timestamp
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --blue --bold --progress-dir=/Users/hongyinzhang/project/invoice_app_datalist/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_1) "Automatic MOC for target invoice_manager"
+	/opt/homebrew/bin/cmake -E cmake_autogen /Users/hongyinzhang/project/invoice_app_datalist/build/CMakeFiles/invoice_manager_autogen.dir/AutogenInfo.json ""
+	/opt/homebrew/bin/cmake -E touch /Users/hongyinzhang/project/invoice_app_datalist/build/invoice_manager_autogen/timestamp
 
 CMakeFiles/invoice_manager.dir/codegen:
 .PHONY : CMakeFiles/invoice_manager.dir/codegen
@@ -81,30 +81,30 @@ CMakeFiles/invoice_manager.dir/codegen:
 CMakeFiles/invoice_manager.dir/invoice_manager_autogen/mocs_compilation.cpp.o: CMakeFiles/invoice_manager.dir/flags.make
 CMakeFiles/invoice_manager.dir/invoice_manager_autogen/mocs_compilation.cpp.o: invoice_manager_autogen/mocs_compilation.cpp
 CMakeFiles/invoice_manager.dir/invoice_manager_autogen/mocs_compilation.cpp.o: CMakeFiles/invoice_manager.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/hongyinzhang/project/invoice_app/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_2) "Building CXX object CMakeFiles/invoice_manager.dir/invoice_manager_autogen/mocs_compilation.cpp.o"
-	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/invoice_manager.dir/invoice_manager_autogen/mocs_compilation.cpp.o -MF CMakeFiles/invoice_manager.dir/invoice_manager_autogen/mocs_compilation.cpp.o.d -o CMakeFiles/invoice_manager.dir/invoice_manager_autogen/mocs_compilation.cpp.o -c /Users/hongyinzhang/project/invoice_app/build/invoice_manager_autogen/mocs_compilation.cpp
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/hongyinzhang/project/invoice_app_datalist/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_2) "Building CXX object CMakeFiles/invoice_manager.dir/invoice_manager_autogen/mocs_compilation.cpp.o"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/invoice_manager.dir/invoice_manager_autogen/mocs_compilation.cpp.o -MF CMakeFiles/invoice_manager.dir/invoice_manager_autogen/mocs_compilation.cpp.o.d -o CMakeFiles/invoice_manager.dir/invoice_manager_autogen/mocs_compilation.cpp.o -c /Users/hongyinzhang/project/invoice_app_datalist/build/invoice_manager_autogen/mocs_compilation.cpp
 
 CMakeFiles/invoice_manager.dir/invoice_manager_autogen/mocs_compilation.cpp.i: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/invoice_manager.dir/invoice_manager_autogen/mocs_compilation.cpp.i"
-	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /Users/hongyinzhang/project/invoice_app/build/invoice_manager_autogen/mocs_compilation.cpp > CMakeFiles/invoice_manager.dir/invoice_manager_autogen/mocs_compilation.cpp.i
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /Users/hongyinzhang/project/invoice_app_datalist/build/invoice_manager_autogen/mocs_compilation.cpp > CMakeFiles/invoice_manager.dir/invoice_manager_autogen/mocs_compilation.cpp.i
 
 CMakeFiles/invoice_manager.dir/invoice_manager_autogen/mocs_compilation.cpp.s: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/invoice_manager.dir/invoice_manager_autogen/mocs_compilation.cpp.s"
-	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /Users/hongyinzhang/project/invoice_app/build/invoice_manager_autogen/mocs_compilation.cpp -o CMakeFiles/invoice_manager.dir/invoice_manager_autogen/mocs_compilation.cpp.s
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /Users/hongyinzhang/project/invoice_app_datalist/build/invoice_manager_autogen/mocs_compilation.cpp -o CMakeFiles/invoice_manager.dir/invoice_manager_autogen/mocs_compilation.cpp.s
 
 CMakeFiles/invoice_manager.dir/main.cpp.o: CMakeFiles/invoice_manager.dir/flags.make
-CMakeFiles/invoice_manager.dir/main.cpp.o: /Users/hongyinzhang/project/invoice_app/main.cpp
+CMakeFiles/invoice_manager.dir/main.cpp.o: /Users/hongyinzhang/project/invoice_app_datalist/main.cpp
 CMakeFiles/invoice_manager.dir/main.cpp.o: CMakeFiles/invoice_manager.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/hongyinzhang/project/invoice_app/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_3) "Building CXX object CMakeFiles/invoice_manager.dir/main.cpp.o"
-	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/invoice_manager.dir/main.cpp.o -MF CMakeFiles/invoice_manager.dir/main.cpp.o.d -o CMakeFiles/invoice_manager.dir/main.cpp.o -c /Users/hongyinzhang/project/invoice_app/main.cpp
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/hongyinzhang/project/invoice_app_datalist/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_3) "Building CXX object CMakeFiles/invoice_manager.dir/main.cpp.o"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/invoice_manager.dir/main.cpp.o -MF CMakeFiles/invoice_manager.dir/main.cpp.o.d -o CMakeFiles/invoice_manager.dir/main.cpp.o -c /Users/hongyinzhang/project/invoice_app_datalist/main.cpp
 
 CMakeFiles/invoice_manager.dir/main.cpp.i: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/invoice_manager.dir/main.cpp.i"
-	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /Users/hongyinzhang/project/invoice_app/main.cpp > CMakeFiles/invoice_manager.dir/main.cpp.i
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /Users/hongyinzhang/project/invoice_app_datalist/main.cpp > CMakeFiles/invoice_manager.dir/main.cpp.i
 
 CMakeFiles/invoice_manager.dir/main.cpp.s: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/invoice_manager.dir/main.cpp.s"
-	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /Users/hongyinzhang/project/invoice_app/main.cpp -o CMakeFiles/invoice_manager.dir/main.cpp.s
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /Users/hongyinzhang/project/invoice_app_datalist/main.cpp -o CMakeFiles/invoice_manager.dir/main.cpp.s
 
 # Object files for target invoice_manager
 invoice_manager_OBJECTS = \
@@ -118,10 +118,11 @@ invoice_manager.app/Contents/MacOS/invoice_manager: CMakeFiles/invoice_manager.d
 invoice_manager.app/Contents/MacOS/invoice_manager: CMakeFiles/invoice_manager.dir/main.cpp.o
 invoice_manager.app/Contents/MacOS/invoice_manager: CMakeFiles/invoice_manager.dir/build.make
 invoice_manager.app/Contents/MacOS/invoice_manager: /opt/homebrew/lib/QtWidgets.framework/Versions/A/QtWidgets
+invoice_manager.app/Contents/MacOS/invoice_manager: /opt/homebrew/lib/QtSql.framework/Versions/A/QtSql
 invoice_manager.app/Contents/MacOS/invoice_manager: /opt/homebrew/lib/QtGui.framework/Versions/A/QtGui
 invoice_manager.app/Contents/MacOS/invoice_manager: /opt/homebrew/lib/QtCore.framework/Versions/A/QtCore
 invoice_manager.app/Contents/MacOS/invoice_manager: CMakeFiles/invoice_manager.dir/link.txt
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --bold --progress-dir=/Users/hongyinzhang/project/invoice_app/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_4) "Linking CXX executable invoice_manager.app/Contents/MacOS/invoice_manager"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --bold --progress-dir=/Users/hongyinzhang/project/invoice_app_datalist/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_4) "Linking CXX executable invoice_manager.app/Contents/MacOS/invoice_manager"
 	$(CMAKE_COMMAND) -E cmake_link_script CMakeFiles/invoice_manager.dir/link.txt --verbose=$(VERBOSE)
 
 # Rule to build all files generated by this target.
@@ -133,6 +134,6 @@ CMakeFiles/invoice_manager.dir/clean:
 .PHONY : CMakeFiles/invoice_manager.dir/clean
 
 CMakeFiles/invoice_manager.dir/depend: invoice_manager_autogen/timestamp
-	cd /Users/hongyinzhang/project/invoice_app/build && $(CMAKE_COMMAND) -E cmake_depends "Unix Makefiles" /Users/hongyinzhang/project/invoice_app /Users/hongyinzhang/project/invoice_app /Users/hongyinzhang/project/invoice_app/build /Users/hongyinzhang/project/invoice_app/build /Users/hongyinzhang/project/invoice_app/build/CMakeFiles/invoice_manager.dir/DependInfo.cmake "--color=$(COLOR)" invoice_manager
+	cd /Users/hongyinzhang/project/invoice_app_datalist/build && $(CMAKE_COMMAND) -E cmake_depends "Unix Makefiles" /Users/hongyinzhang/project/invoice_app_datalist /Users/hongyinzhang/project/invoice_app_datalist /Users/hongyinzhang/project/invoice_app_datalist/build /Users/hongyinzhang/project/invoice_app_datalist/build /Users/hongyinzhang/project/invoice_app_datalist/build/CMakeFiles/invoice_manager.dir/DependInfo.cmake "--color=$(COLOR)" invoice_manager
 .PHONY : CMakeFiles/invoice_manager.dir/depend
 

@@ -53,10 +53,10 @@ RM = /opt/homebrew/bin/cmake -E rm -f
 EQUALS = =
 
 # The top-level source directory on which CMake was run.
-CMAKE_SOURCE_DIR = /Users/hongyinzhang/project/invoice_app
+CMAKE_SOURCE_DIR = /Users/hongyinzhang/project/invoice_app_datalist
 
 # The top-level build directory on which CMake was run.
-CMAKE_BINARY_DIR = /Users/hongyinzhang/project/invoice_app/build
+CMAKE_BINARY_DIR = /Users/hongyinzhang/project/invoice_app_datalist/build
 
 # Utility rule file for invoice_manager_autogen_timestamp_deps.
 
@@ -81,6 +81,6 @@ CMakeFiles/invoice_manager_autogen_timestamp_deps.dir/clean:
 .PHONY : CMakeFiles/invoice_manager_autogen_timestamp_deps.dir/clean
 
 CMakeFiles/invoice_manager_autogen_timestamp_deps.dir/depend:
-	cd /Users/hongyinzhang/project/invoice_app/build && $(CMAKE_COMMAND) -E cmake_depends "Unix Makefiles" /Users/hongyinzhang/project/invoice_app /Users/hongyinzhang/project/invoice_app /Users/hongyinzhang/project/invoice_app/build /Users/hongyinzhang/project/invoice_app/build /Users/hongyinzhang/project/invoice_app/build/CMakeFiles/invoice_manager_autogen_timestamp_deps.dir/DependInfo.cmake "--color=$(COLOR)" invoice_manager_autogen_timestamp_deps
+	cd /Users/hongyinzhang/project/invoice_app_datalist/build && $(CMAKE_COMMAND) -E cmake_depends "Unix Makefiles" /Users/hongyinzhang/project/invoice_app_datalist /Users/hongyinzhang/project/invoice_app_datalist /Users/hongyinzhang/project/invoice_app_datalist/build /Users/hongyinzhang/project/invoice_app_datalist/build /Users/hongyinzhang/project/invoice_app_datalist/build/CMakeFiles/invoice_manager_autogen_timestamp_deps.dir/DependInfo.cmake "--color=$(COLOR)" invoice_manager_autogen_timestamp_deps
 .PHONY : CMakeFiles/invoice_manager_autogen_timestamp_deps.dir/depend
 

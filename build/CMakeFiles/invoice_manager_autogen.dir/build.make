@@ -53,10 +53,10 @@ RM = /opt/homebrew/bin/cmake -E rm -f
 EQUALS = =
 
 # The top-level source directory on which CMake was run.
-CMAKE_SOURCE_DIR = /Users/hongyinzhang/project/invoice_app
+CMAKE_SOURCE_DIR = /Users/hongyinzhang/project/invoice_app_datalist
 
 # The top-level build directory on which CMake was run.
-CMAKE_BINARY_DIR = /Users/hongyinzhang/project/invoice_app/build
+CMAKE_BINARY_DIR = /Users/hongyinzhang/project/invoice_app_datalist/build
 
 # Utility rule file for invoice_manager_autogen.
 
@@ -70,9 +70,9 @@ CMakeFiles/invoice_manager_autogen: invoice_manager_autogen/timestamp
 
 invoice_manager_autogen/timestamp: /opt/homebrew/share/qt/libexec/moc
 invoice_manager_autogen/timestamp: CMakeFiles/invoice_manager_autogen.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --blue --bold --progress-dir=/Users/hongyinzhang/project/invoice_app/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_1) "Automatic MOC for target invoice_manager"
-	/opt/homebrew/bin/cmake -E cmake_autogen /Users/hongyinzhang/project/invoice_app/build/CMakeFiles/invoice_manager_autogen.dir/AutogenInfo.json ""
-	/opt/homebrew/bin/cmake -E touch /Users/hongyinzhang/project/invoice_app/build/invoice_manager_autogen/timestamp
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --blue --bold --progress-dir=/Users/hongyinzhang/project/invoice_app_datalist/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_1) "Automatic MOC for target invoice_manager"
+	/opt/homebrew/bin/cmake -E cmake_autogen /Users/hongyinzhang/project/invoice_app_datalist/build/CMakeFiles/invoice_manager_autogen.dir/AutogenInfo.json ""
+	/opt/homebrew/bin/cmake -E touch /Users/hongyinzhang/project/invoice_app_datalist/build/invoice_manager_autogen/timestamp
 
 CMakeFiles/invoice_manager_autogen.dir/codegen:
 .PHONY : CMakeFiles/invoice_manager_autogen.dir/codegen
@@ -91,6 +91,6 @@ CMakeFiles/invoice_manager_autogen.dir/clean:
 .PHONY : CMakeFiles/invoice_manager_autogen.dir/clean
 
 CMakeFiles/invoice_manager_autogen.dir/depend:
-	cd /Users/hongyinzhang/project/invoice_app/build && $(CMAKE_COMMAND) -E cmake_depends "Unix Makefiles" /Users/hongyinzhang/project/invoice_app /Users/hongyinzhang/project/invoice_app /Users/hongyinzhang/project/invoice_app/build /Users/hongyinzhang/project/invoice_app/build /Users/hongyinzhang/project/invoice_app/build/CMakeFiles/invoice_manager_autogen.dir/DependInfo.cmake "--color=$(COLOR)" invoice_manager_autogen
+	cd /Users/hongyinzhang/project/invoice_app_datalist/build && $(CMAKE_COMMAND) -E cmake_depends "Unix Makefiles" /Users/hongyinzhang/project/invoice_app_datalist /Users/hongyinzhang/project/invoice_app_datalist /Users/hongyinzhang/project/invoice_app_datalist/build /Users/hongyinzhang/project/invoice_app_datalist/build /Users/hongyinzhang/project/invoice_app_datalist/build/CMakeFiles/invoice_manager_autogen.dir/DependInfo.cmake "--color=$(COLOR)" invoice_manager_autogen
 .PHONY : CMakeFiles/invoice_manager_autogen.dir/depend
 
