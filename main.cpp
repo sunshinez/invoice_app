@@ -41,6 +41,7 @@
 #include <QDialogButtonBox>
 #include <QInputDialog>
 #include <QScrollBar>
+#include <pugixml.hpp>
 
 // Invoice data structure
 struct Invoice {
@@ -305,7 +306,18 @@ public:
         result.success = false;
         result.amount = 0.0;
 
-        // Try to extract text using pdftotext (poppler)
+        // ===== STRATEGY 1: Coordinate-based extraction (more robust) =====
+        qDebug() << "Trying coordinate-based extraction...";
+        result = extractWithPositions(filePath);
+
+        if (result.success && !result.payerName.isEmpty() && !result.payeeName.isEmpty()) {
+            qDebug() << "Coordinate-based extraction succeeded!";
+            return result;
+        }
+
+        qDebug() << "Coordinate-based extraction incomplete, falling back to regex...";
+
+        // ===== STRATEGY 2: Regex-based extraction (fallback) =====
         QString text = extractTextWithPdftotext(filePath);
 
         if (text.isEmpty()) {
@@ -317,17 +329,28 @@ public:
         result.rawText = text;
         qDebug() << "Extracted text length:" << text.length();
 
-        // Parse invoice fields from text
-        result.invoiceNumber = extractInvoiceNumber(text);
-        result.invoiceDate = extractInvoiceDate(text);
-        result.payerName = extractPayerName(text);
-        result.payerTaxId = extractTaxId(text, true);
-        result.payeeName = extractPayeeName(text);
-        result.payeeTaxId = extractTaxId(text, false);
-        result.projectName = extractProjectName(text);
-        result.amount = extractAmount(text);
-        result.taxRate = extractTaxRate(text);
-        result.taxAmount = extractTaxAmount(text);
+        // Fill in missing fields from regex
+        if (result.invoiceNumber.isEmpty())
+            result.invoiceNumber = extractInvoiceNumber(text);
+        if (result.invoiceDate.isEmpty())
+            result.invoiceDate = extractInvoiceDate(text);
+        if (result.payerName.isEmpty() || result.payerName == "未知付款方")
+            result.payerName = extractPayerName(text);
+        if (result.payerTaxId.isEmpty())
+            result.payerTaxId = extractTaxId(text, true);
+        if (result.payeeName.isEmpty() || result.payeeName == "未知收款方")
+            result.payeeName = extractPayeeName(text);
+        if (result.payeeTaxId.isEmpty())
+            result.payeeTaxId = extractTaxId(text, false);
+        if (result.projectName.isEmpty() || result.projectName == "综合项目服务")
+            result.projectName = extractProjectName(text);
+        if (result.amount <= 0)
+            result.amount = extractAmount(text);
+        if (result.taxRate <= 0)
+            result.taxRate = extractTaxRate(text);
+        if (result.taxAmount <= 0)
+            result.taxAmount = extractTaxAmount(text);
+
         result.success = !result.invoiceNumber.isEmpty();
 
         return result;
@@ -581,6 +604,697 @@ private:
         }
 
         return 0.0;
+    }
+
+    // ============== Coordinate-based extraction methods ==============
+
+    struct TextPosition {
+        QString text;
+        double x;
+        double y;
+        double width;
+        double height;
+        int page;
+
+        TextPosition() : x(0), y(0), width(0), height(0), page(0) {}
+        TextPosition(const QString& t, double xx, double yy, double w, double h, int p = 1)
+            : text(t), x(xx), y(yy), width(w), height(h), page(p) {}
+    };
+
+    // Extract text with positions using pdftohtml -xml
+    QList<TextPosition> extractTextWithPositions(const QString& filePath) {
+        QList<TextPosition> positions;
+
+        QProcess process;
+        process.start("pdftohtml", QStringList() << "-xml" << "-stdout" << filePath);
+
+        if (!process.waitForFinished(15000)) {
+            qDebug() << "pdftohtml -xml process timeout";
+            return positions;
+        }
+
+        if (process.exitCode() != 0) {
+            qDebug() << "pdftohtml -xml failed:" << process.readAllStandardError();
+            return positions;
+        }
+
+        QByteArray xmlData = process.readAllStandardOutput();
+        if (xmlData.isEmpty()) {
+            qDebug() << "pdftohtml returned empty XML";
+            return positions;
+        }
+
+        // Parse XML using pugixml
+        pugi::xml_document doc;
+        pugi::xml_parse_result result = doc.load_buffer(xmlData.constData(), xmlData.size());
+
+        if (!result) {
+            qDebug() << "XML parse error:" << result.description();
+            return positions;
+        }
+
+        // Iterate through pages and text elements
+        int pageNum = 0;
+        for (pugi::xml_node page = doc.child("pdf2xml").child("page"); page;
+             page = page.next_sibling("page")) {
+            pageNum++;
+
+            // Get page dimensions for coordinate normalization
+            double pageWidth = page.attribute("width").as_double(0);
+            double pageHeight = page.attribute("height").as_double(0);
+
+            if (pageWidth == 0 || pageHeight == 0) {
+                qDebug() << "Warning: Page dimensions not found for page" << pageNum;
+                continue;
+            }
+
+            for (pugi::xml_node textNode = page.child("text"); textNode;
+                 textNode = textNode.next_sibling("text")) {
+
+                QString text = QString::fromUtf8(textNode.child_value());
+                if (text.isEmpty()) continue;
+
+                double x = textNode.attribute("left").as_double(0);
+                double y = textNode.attribute("top").as_double(0);
+                double width = textNode.attribute("width").as_double(0);
+                double height = textNode.attribute("height").as_double(0);
+
+                // Normalize coordinates to 0-1000 range for consistency across different PDFs
+                double normX = (x / pageWidth) * 1000.0;
+                double normY = (y / pageHeight) * 1000.0;
+                double normW = (width / pageWidth) * 1000.0;
+                double normH = (height / pageHeight) * 1000.0;
+
+                positions.append(TextPosition(text, normX, normY, normW, normH, pageNum));
+            }
+        }
+
+        qDebug() << "Extracted" << positions.size() << "text elements with positions";
+        return positions;
+    }
+
+    // Find text element by exact or partial match
+    TextPosition* findByText(QList<TextPosition>& positions, const QString& pattern,
+                              Qt::CaseSensitivity cs = Qt::CaseSensitive) {
+        for (int i = 0; i < positions.size(); ++i) {
+            if (positions[i].text.contains(pattern, cs)) {
+                return &positions[i];
+            }
+        }
+        return nullptr;
+    }
+
+    // Find text element closest to a given position within a radius
+    TextPosition* findNearest(QList<TextPosition>& positions, double x, double y,
+                               double radiusX = 50, double radiusY = 30) {
+        TextPosition* best = nullptr;
+        double bestDist = std::numeric_limits<double>::max();
+
+        for (int i = 0; i < positions.size(); ++i) {
+            double dx = std::abs(positions[i].x - x);
+            double dy = std::abs(positions[i].y - y);
+
+            if (dx <= radiusX && dy <= radiusY) {
+                double dist = std::sqrt(dx * dx + dy * dy);
+                if (dist < bestDist) {
+                    bestDist = dist;
+                    best = &positions[i];
+                }
+            }
+        }
+        return best;
+    }
+
+    // Find text elements within a rectangular region
+    QList<TextPosition> findInRegion(QList<TextPosition>& positions,
+                                      double x1, double y1, double x2, double y2) {
+        QList<TextPosition> results;
+        for (const auto& pos : positions) {
+            if (pos.x >= x1 && pos.x <= x2 && pos.y >= y1 && pos.y <= y2) {
+                results.append(pos);
+            }
+        }
+        return results;
+    }
+
+    // Find text to the right of a given element
+    TextPosition* findRightOf(QList<TextPosition>& positions, const TextPosition& ref,
+                               double maxDistance = 200, double yTolerance = 20) {
+        TextPosition* best = nullptr;
+        double bestX = std::numeric_limits<double>::max();
+
+        for (int i = 0; i < positions.size(); ++i) {
+            const auto& pos = positions[i];
+            // Must be to the right and at similar Y level
+            if (pos.x > ref.x && std::abs(pos.y - ref.y) <= yTolerance) {
+                double dist = pos.x - ref.x;
+                if (dist <= maxDistance && pos.x < bestX) {
+                    bestX = pos.x;
+                    best = &positions[i];
+                }
+            }
+        }
+        return best;
+    }
+
+    // Find text below a given element
+    TextPosition* findBelow(QList<TextPosition>& positions, const TextPosition& ref,
+                             double maxDistance = 100, double xTolerance = 100) {
+        TextPosition* best = nullptr;
+        double bestY = std::numeric_limits<double>::max();
+
+        for (int i = 0; i < positions.size(); ++i) {
+            const auto& pos = positions[i];
+            // Must be below and at similar X level
+            if (pos.y > ref.y && std::abs(pos.x - ref.x) <= xTolerance) {
+                double dist = pos.y - ref.y;
+                if (dist <= maxDistance && pos.y < bestY) {
+                    bestY = pos.y;
+                    best = &positions[i];
+                }
+            }
+        }
+        return best;
+    }
+
+    // Extract invoice number using position-based logic
+    QString extractInvoiceNumberPosition(QList<TextPosition>& positions) {
+        // Strategy 1: Look for "发票号码" label and get text to its right
+        auto* label = findByText(positions, "发票号码", Qt::CaseInsensitive);
+        if (!label) {
+            label = findByText(positions, "发票代码", Qt::CaseInsensitive);
+        }
+        if (!label) {
+            label = findByText(positions, "发票编号", Qt::CaseInsensitive);
+        }
+
+        if (label) {
+            // Look for numbers to the right
+            auto* number = findRightOf(positions, *label, 300, 30);
+            if (number) {
+                QString text = number->text.trimmed();
+                // Validate it looks like an invoice number (8-20 digits)
+                QRegularExpression re("^\\d{8,20}$");
+                if (re.match(text).hasMatch()) {
+                    return text;
+                }
+            }
+        }
+
+        // Strategy 2: Find any 12-20 digit number in the top portion of the page (y < 300)
+        for (auto& pos : positions) {
+            if (pos.y < 300) {
+                QString text = pos.text.trimmed();
+                QRegularExpression re("^\\d{12,20}$");
+                if (re.match(text).hasMatch()) {
+                    return text;
+                }
+            }
+        }
+
+        return QString();
+    }
+
+    // Extract invoice date using position-based logic
+    QString extractInvoiceDatePosition(QList<TextPosition>& positions) {
+        // Look for "开票日期" label
+        auto* label = findByText(positions, "开票日期", Qt::CaseInsensitive);
+        if (label) {
+            // Try to find date to the right
+            auto* dateText = findRightOf(positions, *label, 200, 30);
+            if (dateText) {
+                QString text = dateText->text.trimmed();
+                // Check if it matches date pattern
+                QRegularExpression dateRe("(\\d{4}[年/-]\\d{1,2}[月/-]\\d{1,2}[日]?)");
+                auto match = dateRe.match(text);
+                if (match.hasMatch()) {
+                    return match.captured(1);
+                }
+            }
+
+            // Try below
+            dateText = findBelow(positions, *label, 50, 100);
+            if (dateText) {
+                QString text = dateText->text.trimmed();
+                QRegularExpression dateRe("(\\d{4}[年/-]\\d{1,2}[月/-]\\d{1,2}[日]?)");
+                auto match = dateRe.match(text);
+                if (match.hasMatch()) {
+                    return match.captured(1);
+                }
+            }
+        }
+
+        // Strategy 2: Search all text for date patterns in top portion
+        for (auto& pos : positions) {
+            if (pos.y < 200) {
+                QString text = pos.text;
+                QRegularExpression dateRe("(\\d{4}[年/-]\\d{1,2}[月/-]\\d{1,2}[日]?)");
+                auto match = dateRe.match(text);
+                if (match.hasMatch()) {
+                    return match.captured(1);
+                }
+            }
+        }
+
+        return QString();
+    }
+
+    // Extract buyer (payer) name using position-based logic
+    QString extractPayerNamePosition(QList<TextPosition>& positions) {
+        // Strategy: Look for "购买方" or "买方" or "购" label
+        TextPosition* label = nullptr;
+
+        // Try various labels
+        label = findByText(positions, "购买方", Qt::CaseInsensitive);
+        if (!label) label = findByText(positions, "买方", Qt::CaseInsensitive);
+        if (!label) label = findByText(positions, "购", Qt::CaseInsensitive);
+        if (!label) label = findByText(positions, "买", Qt::CaseInsensitive);
+
+        if (label) {
+            // Look for "名称" near this label
+            auto* nameLabel = findNearest(positions, label->x, label->y + 30, 100, 50);
+            if (nameLabel && nameLabel->text.contains("名称")) {
+                // Company name should be to the right or below
+                auto* name = findRightOf(positions, *nameLabel, 400, 30);
+                if (name) {
+                    QString companyName = name->text.trimmed();
+                    // Clean up - remove tax ID if attached
+                    companyName = companyName.split(" ").first();
+                    if (companyName.length() >= 2 && companyName.length() <= 100) {
+                        return companyName;
+                    }
+                }
+
+                // Try below
+                name = findBelow(positions, *nameLabel, 50, 200);
+                if (name) {
+                    QString companyName = name->text.trimmed();
+                    companyName = companyName.split(" ").first();
+                    if (companyName.length() >= 2 && companyName.length() <= 100) {
+                        return companyName;
+                    }
+                }
+            }
+        }
+
+        // Strategy 2: Look for region in left portion of page where buyer info typically is
+        // Chinese invoices typically have buyer info on left side, upper middle
+        for (auto& pos : positions) {
+            if (pos.x < 500 && pos.y > 100 && pos.y < 400) {
+                if (pos.text.contains("名称") && pos.text.length() < 10) {
+                    auto* name = findRightOf(positions, pos, 400, 30);
+                    if (name) {
+                        QString companyName = name->text.trimmed();
+                        companyName = companyName.split(" ").first();
+                        if (companyName.length() >= 2 && !companyName.contains("统一社会信用")) {
+                            return companyName;
+                        }
+                    }
+                }
+            }
+        }
+
+        return QString();
+    }
+
+    // Extract seller (payee) name using position-based logic
+    QString extractPayeeNamePosition(QList<TextPosition>& positions) {
+        // Strategy: Look for "销售方" or "卖方" or "销" label
+        TextPosition* label = nullptr;
+
+        label = findByText(positions, "销售方", Qt::CaseInsensitive);
+        if (!label) label = findByText(positions, "卖方", Qt::CaseInsensitive);
+        if (!label) label = findByText(positions, "销", Qt::CaseInsensitive);
+        if (!label) label = findByText(positions, "售", Qt::CaseInsensitive);
+
+        if (label) {
+            // Look for "名称" near this label
+            auto* nameLabel = findNearest(positions, label->x, label->y + 30, 100, 50);
+            if (nameLabel && nameLabel->text.contains("名称")) {
+                // Company name should be to the right
+                auto* name = findRightOf(positions, *nameLabel, 400, 30);
+                if (name) {
+                    QString companyName = name->text.trimmed();
+                    companyName = companyName.split(" ").first();
+                    if (companyName.length() >= 2 && companyName.length() <= 100) {
+                        return companyName;
+                    }
+                }
+
+                // Try below
+                name = findBelow(positions, *nameLabel, 50, 200);
+                if (name) {
+                    QString companyName = name->text.trimmed();
+                    companyName = companyName.split(" ").first();
+                    if (companyName.length() >= 2 && companyName.length() <= 100) {
+                        return companyName;
+                    }
+                }
+            }
+        }
+
+        // Strategy 2: Look for region in right portion or lower portion
+        for (auto& pos : positions) {
+            if (pos.y > 200 && pos.y < 600) {
+                if (pos.text.contains("名称") && pos.text.length() < 10) {
+                    // Make sure we're in seller section (check if there's a "销售" or "卖方" nearby)
+                    auto* nearby = findNearest(positions, pos.x - 50, pos.y, 100, 30);
+                    if (nearby && (nearby->text.contains("销") || nearby->text.contains("售"))) {
+                        auto* name = findRightOf(positions, pos, 400, 30);
+                        if (name) {
+                            QString companyName = name->text.trimmed();
+                            companyName = companyName.split(" ").first();
+                            if (companyName.length() >= 2 && !companyName.contains("统一社会信用")) {
+                                return companyName;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        return QString();
+    }
+
+    // Extract tax ID using position-based logic
+    QString extractTaxIdPosition(QList<TextPosition>& positions, bool isBuyer) {
+        // Collect all tax IDs with their Y positions
+        struct TaxIdEntry {
+            QString id;
+            double y;
+        };
+        QList<TaxIdEntry> allTaxIds;
+
+        // Strategy 1: Look for label + tax ID to the right
+        for (auto& pos : positions) {
+            if (pos.text.contains("纳税人识别号") || pos.text.contains("统一社会信用")) {
+                auto* taxId = findRightOf(positions, pos, 400, 30);
+                if (taxId) {
+                    QString text = taxId->text.trimmed();
+                    QRegularExpression re("([A-Z0-9]{15,20})");
+                    auto match = re.match(text);
+                    if (match.hasMatch()) {
+                        allTaxIds.append({match.captured(1), pos.y});
+                    }
+                }
+            }
+        }
+
+        // Strategy 2: Find all standalone tax ID patterns
+        // Tax ID must contain at least one letter (to distinguish from invoice numbers which are digits only)
+        for (auto& pos : positions) {
+            QString text = pos.text;
+            // Match 18-20 alphanumeric chars that contain at least one letter
+            QRegularExpression re("([A-Z0-9]{18,20})");
+            auto match = re.match(text);
+            if (match.hasMatch()) {
+                QString id = match.captured(1);
+                // Verify it contains at least one letter (tax ID vs invoice number)
+                bool hasLetter = false;
+                for (const QChar& c : id) {
+                    if (c.isLetter()) {
+                        hasLetter = true;
+                        break;
+                    }
+                }
+                if (!hasLetter) continue;  // Skip pure numbers (invoice numbers)
+
+                // Check if not already found
+                bool exists = false;
+                for (const auto& entry : allTaxIds) {
+                    if (entry.id == id) {
+                        exists = true;
+                        break;
+                    }
+                }
+                if (!exists) {
+                    allTaxIds.append({id, pos.y});
+                }
+            }
+        }
+
+        if (allTaxIds.isEmpty()) {
+            return QString();
+        }
+
+        // Sort by Y position (top to bottom)
+        std::sort(allTaxIds.begin(), allTaxIds.end(),
+                  [](const TaxIdEntry& a, const TaxIdEntry& b) { return a.y < b.y; });
+
+        // First tax ID (smallest Y) is buyer, second is seller
+        if (isBuyer && !allTaxIds.isEmpty()) {
+            return allTaxIds.first().id;
+        } else if (!isBuyer && allTaxIds.size() >= 2) {
+            return allTaxIds.last().id;  // Return the one with largest Y (seller)
+        } else if (!isBuyer && !allTaxIds.isEmpty()) {
+            return allTaxIds.first().id;
+        }
+
+        return QString();
+    }
+
+    // Extract project name using position-based logic
+    QString extractProjectNamePosition(QList<TextPosition>& positions) {
+        // Strategy 1: Look for text starting with * (service/item marker)
+        for (auto& pos : positions) {
+            QString text = pos.text.trimmed();
+            if (text.startsWith("*") && text.length() > 3) {
+                // Clean up the project name
+                text = text.simplified();
+                if (text.length() >= 2 && text.length() <= 100) {
+                    return text;
+                }
+            }
+        }
+
+        // Strategy 2: Look for "项目名称" header and get text below
+        auto* label = findByText(positions, "项目名称", Qt::CaseInsensitive);
+        if (!label) label = findByText(positions, "货物或应税劳务", Qt::CaseInsensitive);
+        if (!label) label = findByText(positions, "服务名称", Qt::CaseInsensitive);
+
+        if (label) {
+            // Look for content in the rows below
+            auto candidates = findInRegion(positions, label->x - 50, label->y + 20,
+                                            label->x + 400, label->y + 150);
+            for (auto& pos : candidates) {
+                QString text = pos.text.trimmed();
+                if (text.startsWith("*") ||
+                    (text.length() >= 4 && text.length() <= 100 && !text.contains("单位") && !text.contains("数量"))) {
+                    return text.simplified();
+                }
+            }
+        }
+
+        return QString();
+    }
+
+    // Extract amount using position-based logic
+    double extractAmountPosition(QList<TextPosition>& positions) {
+        // Strategy 1: Look for "价税合计" and get amount to the right or below
+        auto* label = findByText(positions, "价税合计", Qt::CaseInsensitive);
+        if (label) {
+            // Look for ¥ symbol or number nearby
+            auto candidates = findInRegion(positions, label->x + 100, label->y - 20,
+                                            label->x + 400, label->y + 50);
+            for (auto& pos : candidates) {
+                QString text = pos.text;
+                QRegularExpression re("(?:¥|￥)?\\s*([\\d,]+\\.\\d{2})");
+                auto match = re.match(text);
+                if (match.hasMatch()) {
+                    QString amountStr = match.captured(1);
+                    amountStr.remove(',');
+                    bool ok;
+                    double amount = amountStr.toDouble(&ok);
+                    if (ok && amount > 0) {
+                        return amount;
+                    }
+                }
+            }
+        }
+
+        // Strategy 2: Look for (小写) label
+        label = findByText(positions, "小写", Qt::CaseInsensitive);
+        if (label) {
+            auto* amountText = findRightOf(positions, *label, 200, 30);
+            if (amountText) {
+                QString text = amountText->text;
+                QRegularExpression re("(?:¥|￥)?\\s*([\\d,]+\\.\\d{2})");
+                auto match = re.match(text);
+                if (match.hasMatch()) {
+                    QString amountStr = match.captured(1);
+                    amountStr.remove(',');
+                    bool ok;
+                    double amount = amountStr.toDouble(&ok);
+                    if (ok && amount > 0) {
+                        return amount;
+                    }
+                }
+            }
+        }
+
+        // Strategy 3: Find large amounts in lower portion of invoice
+        double maxAmount = 0;
+        for (auto& pos : positions) {
+            if (pos.y > 500) {  // Lower portion where totals typically are
+                QString text = pos.text;
+                QRegularExpression re("(?:¥|￥)?\\s*([\\d,]+\\.\\d{2})");
+                auto match = re.match(text);
+                if (match.hasMatch()) {
+                    QString amountStr = match.captured(1);
+                    amountStr.remove(',');
+                    bool ok;
+                    double amount = amountStr.toDouble(&ok);
+                    if (ok && amount > maxAmount) {
+                        maxAmount = amount;
+                    }
+                }
+            }
+        }
+
+        return maxAmount;
+    }
+
+    // Extract tax rate using position-based logic
+    double extractTaxRatePosition(QList<TextPosition>& positions) {
+        // Look for percentage patterns in the middle section
+        for (auto& pos : positions) {
+            if (pos.y > 200 && pos.y < 600) {
+                QString text = pos.text;
+                QRegularExpression re("(\\d+)%");
+                auto match = re.match(text);
+                if (match.hasMatch()) {
+                    bool ok;
+                    double rate = match.captured(1).toDouble(&ok);
+                    if (ok && rate > 0 && rate <= 100) {
+                        return rate;
+                    }
+                }
+            }
+        }
+        return 0.0;
+    }
+
+    // Extract tax amount using position-based logic
+    double extractTaxAmountPosition(QList<TextPosition>& positions) {
+        // Strategy 1: Look for "税额" or "税 额" column header and find value in that column
+        TextPosition* taxLabel = nullptr;
+
+        for (auto& pos : positions) {
+            // Match "税额" with any amount of whitespace between characters
+            // Remove ALL whitespace to handle "税 额", "税  额", etc.
+            QString noSpaceText = pos.text;
+            noSpaceText.remove(QRegularExpression("\\s+"));
+            if (noSpaceText == "税额") {
+                taxLabel = &pos;
+                break;
+            }
+        }
+
+        if (taxLabel) {
+            // Find the first numeric value below the header in the same column
+            double headerX = taxLabel->x;
+            TextPosition* bestMatch = nullptr;
+            double bestY = std::numeric_limits<double>::max();
+
+            for (auto& pos : positions) {
+                // Must be below the header and in the same column (similar X)
+                if (pos.y > taxLabel->y + 5 && std::abs(pos.x - headerX) < 80) {
+                    QString text = pos.text.trimmed();
+                    // Check if it looks like a decimal amount (e.g., "41.89")
+                    QRegularExpression re("^([\\d,]+\\.\\d{2})$");
+                    auto match = re.match(text);
+                    if (match.hasMatch()) {
+                        QString amountStr = match.captured(1);
+                        amountStr.remove(',');
+                        bool ok;
+                        double amount = amountStr.toDouble(&ok);
+                        // Tax amount should be relatively small (typically < 1000 for these invoices)
+                        if (ok && amount > 0 && amount < 1000) {
+                            if (pos.y < bestY) {
+                                bestY = pos.y;
+                                bestMatch = &pos;
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (bestMatch) {
+                QString amountStr = bestMatch->text.trimmed();
+                amountStr.remove(',');
+                bool ok;
+                double amount = amountStr.toDouble(&ok);
+                if (ok) return amount;
+            }
+        }
+
+        // Strategy 2: Look for project row with * marker and extract tax amount
+        // Find numbers in the row after the tax rate %
+        for (auto& pos : positions) {
+            if (pos.text.contains("%")) {
+                // Look for number to the right of % symbol (this should be tax amount)
+                auto* taxText = findRightOf(positions, pos, 150, 30);
+                if (taxText) {
+                    QString text = taxText->text;
+                    QRegularExpression re("([\\d,]+\\.\\d{2})");
+                    auto match = re.match(text);
+                    if (match.hasMatch()) {
+                        QString amountStr = match.captured(1);
+                        amountStr.remove(',');
+                        bool ok;
+                        double amount = amountStr.toDouble(&ok);
+                        if (ok && amount > 0 && amount < 100000) {
+                            return amount;
+                        }
+                    }
+                }
+            }
+        }
+
+        return 0.0;
+    }
+
+    // Main position-based extraction method
+    ExtractedFields extractWithPositions(const QString& filePath) {
+        ExtractedFields result;
+        result.success = false;
+        result.amount = 0.0;
+
+        auto positions = extractTextWithPositions(filePath);
+        if (positions.isEmpty()) {
+            qDebug() << "Failed to extract positions from PDF";
+            return result;
+        }
+
+        // Extract all fields using position-based methods
+        result.invoiceNumber = extractInvoiceNumberPosition(positions);
+        result.invoiceDate = extractInvoiceDatePosition(positions);
+        result.payerName = extractPayerNamePosition(positions);
+        result.payerTaxId = extractTaxIdPosition(positions, true);
+        result.payeeName = extractPayeeNamePosition(positions);
+        result.payeeTaxId = extractTaxIdPosition(positions, false);
+        result.projectName = extractProjectNamePosition(positions);
+        result.amount = extractAmountPosition(positions);
+        result.taxRate = extractTaxRatePosition(positions);
+        result.taxAmount = extractTaxAmountPosition(positions);
+
+        // Build raw text from positions for debugging
+        QStringList texts;
+        for (const auto& pos : positions) {
+            texts.append(pos.text);
+        }
+        result.rawText = texts.join(" ");
+
+        // Success if we got at least an invoice number
+        result.success = !result.invoiceNumber.isEmpty();
+
+        qDebug() << "Position-based extraction results:";
+        qDebug() << "  Invoice:" << result.invoiceNumber;
+        qDebug() << "  Date:" << result.invoiceDate;
+        qDebug() << "  Payer:" << result.payerName;
+        qDebug() << "  Payee:" << result.payeeName;
+
+        return result;
     }
 };
 

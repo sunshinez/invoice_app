@@ -444,7 +444,10 @@
 		"/opt/homebrew/lib/cmake/Qt6Sql/Qt6QSQLiteDriverPluginTargets.cmake",
 		"/opt/homebrew/lib/cmake/Qt6Sql/Qt6QSQLiteDriverPluginTargets-release.cmake",
 		"/opt/homebrew/lib/cmake/Qt6Sql/Qt6QSQLiteDriverPluginAdditionalTargetInfo.cmake",
-		"/opt/homebrew/lib/cmake/Qt6Sql/Qt6SqlVersionlessAliasTargets.cmake"
+		"/opt/homebrew/lib/cmake/Qt6Sql/Qt6SqlVersionlessAliasTargets.cmake",
+		"/opt/homebrew/share/cmake/Modules/FindPkgConfig.cmake",
+		"/opt/homebrew/share/cmake/Modules/FindPackageHandleStandardArgs.cmake",
+		"/opt/homebrew/share/cmake/Modules/FindPackageMessage.cmake"
 	],
 	"CMAKE_SOURCE_DIR" : "/Users/hongyinzhang/project/invoice_app_datalist",
 	"CROSS_CONFIG" : false,
@@ -471,6 +474,7 @@
 	],
 	"MOC_INCLUDES" : 
 	[
+		"/opt/homebrew/Cellar/pugixml/1.15/include",
 		"/opt/homebrew/lib/QtWidgets.framework/Headers",
 		"/opt/homebrew/lib/QtWidgets.framework",
 		"/opt/homebrew/lib/QtCore.framework/Headers",

@@ -1132,6 +1132,8 @@ CMakeFiles/invoice_manager.dir/main.cpp.o: \
   /opt/homebrew/lib/QtWidgets.framework/Headers/qinputdialog.h \
   /opt/homebrew/lib/QtWidgets.framework/Headers/QScrollBar \
   /opt/homebrew/lib/QtWidgets.framework/Headers/qscrollbar.h \
+  /opt/homebrew/Cellar/pugixml/1.15/include/pugixml.hpp \
+  /opt/homebrew/Cellar/pugixml/1.15/include/pugiconfig.hpp \
   /Users/hongyinzhang/project/invoice_app_datalist/build/invoice_manager_autogen/include/main.moc \
   /opt/homebrew/lib/QtCore.framework/Headers/qtmochelpers.h \
   /opt/homebrew/lib/QtCore.framework/Headers/qtmocconstants.h \

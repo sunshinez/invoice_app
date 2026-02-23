@@ -761,6 +761,8 @@
  mdp:/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/17/include/stdarg.h
  mdp:/Users/hongyinzhang/project/invoice_app_datalist/build/invoice_manager_autogen/moc_predefs.h
  mdp:/Users/hongyinzhang/project/invoice_app_datalist/main.cpp
+ mdp:/opt/homebrew/Cellar/pugixml/1.15/include/pugiconfig.hpp
+ mdp:/opt/homebrew/Cellar/pugixml/1.15/include/pugixml.hpp
  mdp:/opt/homebrew/Cellar/qtbase/6.10.1/lib/QtCore.framework/Versions/A/Headers/QDateTime
  mdp:/opt/homebrew/Cellar/qtbase/6.10.1/lib/QtCore.framework/Versions/A/Headers/QDebug
  mdp:/opt/homebrew/Cellar/qtbase/6.10.1/lib/QtCore.framework/Versions/A/Headers/QDir
