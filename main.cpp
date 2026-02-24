@@ -40,6 +40,9 @@
 #include <QDoubleSpinBox>
 #include <QDialogButtonBox>
 #include <QInputDialog>
+#include <QMenu>
+#include <QTimer>
+#include <QPointer>
 #include <QScrollBar>
 #include <QDesktopServices>
 #include <QUrl>
@@ -114,7 +117,102 @@ public:
             return false;
         }
 
+        // 创建项目表
+        if (!createProjectsTable()) {
+            return false;
+        }
+
         return true;
+    }
+
+    bool createProjectsTable() {
+        QSqlQuery query;
+        QString sql = "CREATE TABLE IF NOT EXISTS projects ("
+                      "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                      "name TEXT NOT NULL UNIQUE, "
+                      "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, "
+                      "updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP "
+                      ")";
+
+        if (!query.exec(sql)) {
+            qDebug() << "Failed to create projects table:" << query.lastError().text();
+            return false;
+        }
+
+        return true;
+    }
+
+    // ========== 项目管理方法 ==========
+
+    bool addProject(const QString& name) {
+        QSqlQuery query;
+        query.prepare("INSERT INTO projects (name) VALUES (:name)");
+        query.bindValue(":name", name);
+
+        if (!query.exec()) {
+            qDebug() << "Failed to add project:" << query.lastError().text();
+            return false;
+        }
+
+        return true;
+    }
+
+    QList<QPair<int, QString>> getAllProjects() {
+        QList<QPair<int, QString>> projects;
+        QSqlQuery query("SELECT id, name FROM projects ORDER BY created_at ASC");
+
+        while (query.next()) {
+            int id = query.value("id").toInt();
+            QString name = query.value("name").toString();
+            projects.append(qMakePair(id, name));
+        }
+
+        return projects;
+    }
+
+    bool renameProject(int id, const QString& newName) {
+        QSqlQuery query;
+        query.prepare("UPDATE projects SET name = :name, updated_at = CURRENT_TIMESTAMP WHERE id = :id");
+        query.bindValue(":name", newName);
+        query.bindValue(":id", id);
+
+        if (!query.exec()) {
+            qDebug() << "Failed to rename project:" << query.lastError().text();
+            return false;
+        }
+
+        return true;
+    }
+
+    bool deleteProject(int id) {
+        QSqlQuery query;
+        query.prepare("DELETE FROM projects WHERE id = :id");
+        query.bindValue(":id", id);
+
+        if (!query.exec()) {
+            qDebug() << "Failed to delete project:" << query.lastError().text();
+            return false;
+        }
+
+        return true;
+    }
+
+    bool isProjectNameExists(const QString& name, int excludeId = -1) {
+        QSqlQuery query;
+        if (excludeId >= 0) {
+            query.prepare("SELECT COUNT(*) FROM projects WHERE name = :name AND id != :id");
+            query.bindValue(":name", name);
+            query.bindValue(":id", excludeId);
+        } else {
+            query.prepare("SELECT COUNT(*) FROM projects WHERE name = :name");
+            query.bindValue(":name", name);
+        }
+
+        if (query.exec() && query.next()) {
+            return query.value(0).toInt() > 0;
+        }
+
+        return false;
     }
 
     bool addInvoice(const Invoice& invoice) {
@@ -1357,6 +1455,7 @@ public:
     InvoiceManagerWindow(QWidget* parent = nullptr) : QMainWindow(parent) {
         setupUI();
         refreshInvoiceList();
+        refreshProjectsList();
     }
 
 private slots:
@@ -1534,6 +1633,50 @@ private:
 
         layout->addWidget(createNavItem("", "星标项目", false));
         layout->addWidget(createNavItem("", "已逾期", false));
+
+        layout->addSpacing(24);
+
+        // 项目区域标题和添加按钮
+        QWidget* projectHeader = new QWidget;
+        QHBoxLayout* projectHeaderLayout = new QHBoxLayout(projectHeader);
+        projectHeaderLayout->setContentsMargins(0, 0, 0, 0);
+        projectHeaderLayout->setSpacing(0);
+
+        QLabel* projectsLabel = new QLabel("项目");
+        projectsLabel->setStyleSheet("font-size: 11px; font-weight: 600; color: #86868B;");
+        projectHeaderLayout->addWidget(projectsLabel);
+
+        projectHeaderLayout->addStretch();
+
+        QPushButton* addProjectBtn = new QPushButton("+");
+        addProjectBtn->setFixedSize(18, 18);
+        addProjectBtn->setCursor(Qt::PointingHandCursor);
+        addProjectBtn->setStyleSheet(
+            "QPushButton {"
+            "  background-color: #007AFF;"
+            "  color: white;"
+            "  border-radius: 9px;"
+            "  font-size: 12px;"
+            "  font-weight: bold;"
+            "  border: none;"
+            "  padding: 0;"
+            "  margin: 0;"
+            "}"
+            "QPushButton:hover {"
+            "  background-color: #0051D5;"
+            "}"
+        );
+        connect(addProjectBtn, &QPushButton::clicked, this, &InvoiceManagerWindow::onAddProjectClicked);
+        projectHeaderLayout->addWidget(addProjectBtn);
+
+        layout->addWidget(projectHeader);
+
+        // 项目列表容器
+        QWidget* projectsContainer = new QWidget;
+        projectsLayout = new QVBoxLayout(projectsContainer);
+        projectsLayout->setContentsMargins(0, 4, 0, 0);
+        projectsLayout->setSpacing(4);
+        layout->addWidget(projectsContainer);
 
         layout->addStretch();
 
@@ -2263,6 +2406,11 @@ private:
     QHash<QWidget*, int> invoiceItemMap;
     int currentInvoiceId = -1;
 
+    // Project management
+    QVBoxLayout* projectsLayout = nullptr;  // 项目列表布局
+    QPointer<QLineEdit> editingProjectEdit = nullptr; // 当前正在编辑的项目控件（使用QPointer安全指针）
+    int editingProjectId = -1;               // 当前正在编辑的项目ID（-1表示新增）
+
     // Editable fields for invoice metadata
     QLineEdit* editInvoiceNumber;
     QLineEdit* editInvoiceDate;
@@ -2277,53 +2425,363 @@ private:
     QLabel* pdfPreviewLabel;
 
 private slots:
-    void onSaveInvoiceChanges() {
-        if (currentInvoiceId <= 0) return;
+    void onSaveInvoiceChanges();
 
-        Invoice invoice = db.getInvoiceById(currentInvoiceId);
-        if (invoice.id <= 0) return;
+    // ========== 项目管理相关槽函数 ==========
+    void onAddProjectClicked();
+    void onProjectNameEditingFinished();
+    void onProjectContextMenuRequested(int projectId, const QString& projectName, const QPoint& globalPos);
+    void startRenameProject(int projectId, const QString& currentName, QWidget* projectWidget = nullptr);
+    void deleteProject(int projectId);
+    void refreshProjectsList();
+};
 
-        // Update fields from edit controls
-        invoice.invoiceNumber = editInvoiceNumber->text();
-        invoice.invoiceDate = editInvoiceDate->text();
-        invoice.payerName = editPayerName->text();
-        invoice.payerTaxId = editPayerTaxId->text();
-        invoice.payeeName = editPayeeName->text();
-        invoice.payeeTaxId = editPayeeTaxId->text();
-        invoice.projectName = editProjectName->text();
-        invoice.amount = editAmount->value();
-        invoice.taxRate = editTaxRate->value();
-        invoice.taxAmount = editTaxAmount->value();
+// ========== InvoiceManagerWindow 方法实现 ==========
 
-        // Save to database
-        QSqlQuery query;
-        query.prepare("UPDATE invoices SET invoice_number = :invoice_number, invoice_date = :invoice_date, "
-                      "payer_name = :payer_name, payer_tax_id = :payer_tax_id, "
-                      "payee_name = :payee_name, payee_tax_id = :payee_tax_id, "
-                      "project_name = :project_name, amount = :amount, "
-                      "tax_rate = :tax_rate, tax_amount = :tax_amount "
-                      "WHERE id = :id");
-        query.bindValue(":invoice_number", invoice.invoiceNumber);
-        query.bindValue(":invoice_date", invoice.invoiceDate);
-        query.bindValue(":payer_name", invoice.payerName);
-        query.bindValue(":payer_tax_id", invoice.payerTaxId);
-        query.bindValue(":payee_name", invoice.payeeName);
-        query.bindValue(":payee_tax_id", invoice.payeeTaxId);
-        query.bindValue(":project_name", invoice.projectName);
-        query.bindValue(":amount", invoice.amount);
-        query.bindValue(":tax_rate", QString("%1%").arg(invoice.taxRate));
-        query.bindValue(":tax_amount", invoice.taxAmount);
-        query.bindValue(":id", invoice.id);
+void InvoiceManagerWindow::onSaveInvoiceChanges() {
+    if (currentInvoiceId <= 0) return;
 
-        if (query.exec()) {
-            QMessageBox::information(this, "保存成功", "发票信息已更新。");
-            refreshInvoiceList();
-            updateDetailView(invoice);
-        } else {
-            QMessageBox::warning(this, "保存失败", "无法保存修改：" + query.lastError().text());
+    Invoice invoice = db.getInvoiceById(currentInvoiceId);
+    if (invoice.id <= 0) return;
+
+    // Update fields from edit controls
+    invoice.invoiceNumber = editInvoiceNumber->text();
+    invoice.invoiceDate = editInvoiceDate->text();
+    invoice.payerName = editPayerName->text();
+    invoice.payerTaxId = editPayerTaxId->text();
+    invoice.payeeName = editPayeeName->text();
+    invoice.payeeTaxId = editPayeeTaxId->text();
+    invoice.projectName = editProjectName->text();
+    invoice.amount = editAmount->value();
+    invoice.taxRate = editTaxRate->value();
+    invoice.taxAmount = editTaxAmount->value();
+
+    // Save to database
+    QSqlQuery query;
+    query.prepare("UPDATE invoices SET invoice_number = :invoice_number, invoice_date = :invoice_date, "
+                  "payer_name = :payer_name, payer_tax_id = :payer_tax_id, "
+                  "payee_name = :payee_name, payee_tax_id = :payee_tax_id, "
+                  "project_name = :project_name, amount = :amount, "
+                  "tax_rate = :tax_rate, tax_amount = :tax_amount "
+                  "WHERE id = :id");
+    query.bindValue(":invoice_number", invoice.invoiceNumber);
+    query.bindValue(":invoice_date", invoice.invoiceDate);
+    query.bindValue(":payer_name", invoice.payerName);
+    query.bindValue(":payer_tax_id", invoice.payerTaxId);
+    query.bindValue(":payee_name", invoice.payeeName);
+    query.bindValue(":payee_tax_id", invoice.payeeTaxId);
+    query.bindValue(":project_name", invoice.projectName);
+    query.bindValue(":amount", invoice.amount);
+    query.bindValue(":tax_rate", QString("%1%").arg(invoice.taxRate));
+    query.bindValue(":tax_amount", invoice.taxAmount);
+    query.bindValue(":id", invoice.id);
+
+    if (query.exec()) {
+        QMessageBox::information(this, "保存成功", "发票信息已更新。");
+        refreshInvoiceList();
+        updateDetailView(invoice);
+    } else {
+        QMessageBox::warning(this, "保存失败", "无法保存修改：" + query.lastError().text());
+    }
+}
+
+// ========== 项目管理方法实现 ==========
+
+void InvoiceManagerWindow::onAddProjectClicked() {
+    if (!projectsLayout || editingProjectEdit) return; // 如果已经在编辑中，则返回
+
+    // 创建新的可编辑项目项
+    QLineEdit* edit = new QLineEdit();
+    edit->setPlaceholderText("输入项目名称");
+    edit->setFixedHeight(28);
+    edit->setStyleSheet(
+        "QLineEdit {"
+        "  background-color: white;"
+        "  border: 2px solid #007AFF;"
+        "  border-radius: 6px;"
+        "  padding: 4px 10px;"
+        "  font-size: 13px;"
+        "  color: #1D1D1F;"
+        "}"
+    );
+
+    // 保存编辑状态
+    editingProjectEdit = edit;
+    editingProjectId = -1; // -1 表示新增
+
+    // 添加到布局（在stretch之前）
+    int insertIndex = projectsLayout->count();
+    if (insertIndex > 0) {
+        QLayoutItem* lastItem = projectsLayout->itemAt(insertIndex - 1);
+        if (lastItem && !lastItem->widget()) {
+            insertIndex--;
         }
     }
-};
+    projectsLayout->insertWidget(insertIndex, edit);
+
+    // 设置焦点
+    edit->setFocus();
+
+    // 连接信号 - 使用QueuedConnection避免焦点事件冲突
+    connect(edit, &QLineEdit::editingFinished, this, &InvoiceManagerWindow::onProjectNameEditingFinished, Qt::QueuedConnection);
+}
+
+void InvoiceManagerWindow::onProjectNameEditingFinished() {
+    // 如果编辑控件已被删除或清理，直接返回
+    if (!editingProjectEdit) return;
+
+    QLineEdit* edit = editingProjectEdit.data();
+    QString name = edit->text().trimmed();
+
+    // 验证1: 不能为空
+    if (name.isEmpty()) {
+        QMessageBox::warning(this, "错误", "项目名称不能为空");
+        // 检查edit是否还有效
+        if (editingProjectEdit) {
+            editingProjectEdit->setFocus();
+            editingProjectEdit->selectAll();
+        }
+        return;
+    }
+
+    // 验证2: 不能重复
+    if (editingProjectId < 0) {
+        // 新增模式
+        if (db.isProjectNameExists(name)) {
+            QMessageBox::warning(this, "错误", "项目名称已存在");
+            if (editingProjectEdit) {
+                editingProjectEdit->setFocus();
+                editingProjectEdit->selectAll();
+            }
+            return;
+        }
+    } else {
+        // 重命名模式
+        if (db.isProjectNameExists(name, editingProjectId)) {
+            QMessageBox::warning(this, "错误", "项目名称已存在");
+            if (editingProjectEdit) {
+                editingProjectEdit->setFocus();
+                editingProjectEdit->selectAll();
+            }
+            return;
+        }
+    }
+
+    // 验证通过，保存到数据库
+    bool saveSuccess = false;
+    if (editingProjectId < 0) {
+        // 新增模式
+        saveSuccess = db.addProject(name);
+    } else {
+        // 重命名模式
+        saveSuccess = db.renameProject(editingProjectId, name);
+    }
+
+    if (saveSuccess) {
+        // 清理状态
+        editingProjectEdit = nullptr;
+        editingProjectId = -1;
+        // 安全删除编辑控件
+        edit->deleteLater();
+        // 刷新列表
+        refreshProjectsList();
+    } else {
+        QMessageBox::warning(this, "错误", "保存失败，请重试");
+    }
+}
+
+void InvoiceManagerWindow::onProjectContextMenuRequested(int projectId, const QString& projectName, const QPoint& globalPos) {
+    QMenu menu(this);
+    QAction* renameAction = menu.addAction("重命名项目");
+    QAction* deleteAction = menu.addAction("删除项目");
+
+    // 设置样式
+    menu.setStyleSheet(
+        "QMenu {"
+        "  background-color: white;"
+        "  border: 1px solid #D1D1D1;"
+        "  border-radius: 6px;"
+        "  padding: 4px;"
+        "}"
+        "QMenu::item {"
+        "  padding: 6px 20px;"
+        "  font-size: 13px;"
+        "  color: #1D1D1F;"
+        "  border-radius: 4px;"
+        "}"
+        "QMenu::item:selected {"
+        "  background-color: #E7E7E7;"
+        "}"
+    );
+
+    QAction* selected = menu.exec(globalPos);
+    if (selected == renameAction) {
+        // 找到对应的控件
+        QWidget* projectWidget = nullptr;
+        for (int i = 0; i < projectsLayout->count(); ++i) {
+            QLayoutItem* item = projectsLayout->itemAt(i);
+            if (item && item->widget()) {
+                QPushButton* btn = qobject_cast<QPushButton*>(item->widget());
+                if (btn && btn->text() == projectName) {
+                    projectWidget = btn;
+                    break;
+                }
+            }
+        }
+        if (projectWidget) {
+            startRenameProject(projectId, projectName, projectWidget);
+        }
+    } else if (selected == deleteAction) {
+        deleteProject(projectId);
+    }
+}
+
+void InvoiceManagerWindow::startRenameProject(int projectId, const QString& currentName, QWidget* projectWidget) {
+    if (!projectsLayout || !projectWidget) return;
+
+    // 获取控件在布局中的索引
+    int index = projectsLayout->indexOf(projectWidget);
+    if (index < 0) return;
+
+    // 删除原控件
+    projectsLayout->removeWidget(projectWidget);
+    delete projectWidget;
+
+    // 创建输入框
+    QLineEdit* edit = new QLineEdit(currentName);
+    edit->setFixedHeight(28);
+    edit->setStyleSheet(
+        "QLineEdit {"
+        "  background-color: white;"
+        "  border: 2px solid #007AFF;"
+        "  border-radius: 6px;"
+        "  padding: 4px 10px;"
+        "  font-size: 13px;"
+        "  color: #1D1D1F;"
+        "}"
+    );
+
+    // 全选文本
+    edit->selectAll();
+
+    // 保存编辑状态
+    editingProjectEdit = edit;
+    editingProjectId = projectId;
+
+    // 插入到相同位置
+    projectsLayout->insertWidget(index, edit);
+
+    // 设置焦点
+    edit->setFocus();
+
+    // 连接信号
+    connect(edit, &QLineEdit::editingFinished, this, &InvoiceManagerWindow::onProjectNameEditingFinished);
+}
+
+void InvoiceManagerWindow::deleteProject(int projectId) {
+    if (db.deleteProject(projectId)) {
+        refreshProjectsList();
+    } else {
+        QMessageBox::warning(this, "删除失败", "无法删除项目");
+    }
+}
+
+void InvoiceManagerWindow::refreshProjectsList() {
+    if (!projectsLayout) return;
+
+    // 清除现有项目（跳过正在编辑的控件）
+    QLayoutItem* child;
+    int i = 0;
+    while (i < projectsLayout->count()) {
+        child = projectsLayout->itemAt(i);
+        if (!child) {
+            i++;
+            continue;
+        }
+        QWidget* widget = child->widget();
+        // 跳过正在编辑的控件
+        if (widget && widget == editingProjectEdit) {
+            i++;
+            continue;
+        }
+        // 移除并删除控件
+        projectsLayout->removeItem(child);
+        if (widget) {
+            delete widget;
+        }
+        delete child;
+    }
+
+    // 重新加载项目列表
+    QList<QPair<int, QString>> projects = db.getAllProjects();
+
+    for (const auto& project : projects) {
+        int projectId = project.first;
+        QString projectName = project.second;
+
+        // 检查是否已存在（正在编辑状态）
+        bool exists = false;
+        for (int j = 0; j < projectsLayout->count(); j++) {
+            QLayoutItem* item = projectsLayout->itemAt(j);
+            if (item && item->widget()) {
+                QPushButton* btn = qobject_cast<QPushButton*>(item->widget());
+                if (btn && btn->text() == projectName) {
+                    exists = true;
+                    break;
+                }
+            }
+        }
+        if (exists) continue;
+
+        QPushButton* btn = new QPushButton(projectName);
+        btn->setFixedHeight(28);
+        btn->setCursor(Qt::PointingHandCursor);
+        btn->setStyleSheet(
+            "QPushButton {"
+            "  background-color: transparent;"
+            "  color: #1D1D1F;"
+            "  border: none;"
+            "  border-radius: 6px;"
+            "  text-align: left;"
+            "  padding-left: 10px;"
+            "  font-size: 13px;"
+            "  font-weight: 400;"
+            "}"
+            "QPushButton:hover {"
+            "  background-color: #F2F2F2;"
+            "}"
+        );
+
+        // 设置上下文菜单
+        btn->setContextMenuPolicy(Qt::CustomContextMenu);
+        connect(btn, &QWidget::customContextMenuRequested, [this, projectId, projectName, btn](const QPoint& pos) {
+            onProjectContextMenuRequested(projectId, projectName, btn->mapToGlobal(pos));
+        });
+
+        // 在 stretch 之前插入
+        int insertIndex = projectsLayout->count();
+        if (insertIndex > 0) {
+            QLayoutItem* lastItem = projectsLayout->itemAt(insertIndex - 1);
+            if (lastItem && !lastItem->widget()) {
+                // 最后一个是非 widget（可能是 stretch），在前面插入
+                insertIndex--;
+            }
+        }
+        projectsLayout->insertWidget(insertIndex, btn);
+    }
+
+    // 确保有 stretch
+    bool hasStretch = false;
+    for (int j = 0; j < projectsLayout->count(); j++) {
+        if (!projectsLayout->itemAt(j)->widget()) {
+            hasStretch = true;
+            break;
+        }
+    }
+    if (!hasStretch) {
+        projectsLayout->addStretch();
+    }
+}
 
 int main(int argc, char* argv[]) {
     QApplication app(argc, argv);
