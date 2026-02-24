@@ -9,6 +9,7 @@
 #include <QLineEdit>
 #include <QTableWidget>
 #include <QTableWidgetItem>
+#include <QListWidget>
 #include <QHeaderView>
 #include <QFrame>
 #include <QScrollArea>
@@ -57,13 +58,152 @@ struct Invoice {
     QString payerTaxId;
     QString payeeName;
     QString payeeTaxId;
-    QString projectName;
+    QString projectName;        // 报销项目（用户分配的）
+    QString invoiceProjectName; // 发票上的项目名称（从PDF提取的）
     double amount;
     double taxRate;
     double taxAmount;
     QString filePath;
     QDateTime importDate;
     QString status;
+};
+
+// Project Selection Dialog
+class ProjectSelectionDialog : public QDialog {
+    Q_OBJECT
+
+public:
+    ProjectSelectionDialog(const QList<QPair<int, QString>>& projects, QWidget* parent = nullptr)
+        : QDialog(parent), allProjects(projects) {
+        setWindowTitle("选择项目");
+        setMinimumWidth(300);
+        setMaximumHeight(400);
+
+        QVBoxLayout* layout = new QVBoxLayout(this);
+        layout->setSpacing(12);
+        layout->setContentsMargins(16, 16, 16, 16);
+
+        // Search box
+        searchEdit = new QLineEdit;
+        searchEdit->setPlaceholderText("搜索项目...");
+        searchEdit->setStyleSheet(
+            "QLineEdit {"
+            "  background-color: #F2F2F2;"
+            "  border: none;"
+            "  border-radius: 8px;"
+            "  padding: 8px 12px;"
+            "  font-size: 13px;"
+            "  color: #1D1D1F;"
+            "}"
+        );
+        layout->addWidget(searchEdit);
+
+        // Project list
+        listWidget = new QListWidget;
+        listWidget->setStyleSheet(
+            "QListWidget {"
+            "  background-color: transparent;"
+            "  border: none;"
+            "  outline: none;"
+            "}"
+            "QListWidget::item {"
+            "  padding: 10px 12px;"
+            "  border-radius: 6px;"
+            "  font-size: 13px;"
+            "  color: #1D1D1F;"
+            "}"
+            "QListWidget::item:selected {"
+            "  background-color: #E8F2FF;"
+            "  color: #007AFF;"
+            "}"
+            "QListWidget::item:hover {"
+            "  background-color: #F2F2F2;"
+            "}"
+        );
+        listWidget->setSelectionMode(QAbstractItemView::SingleSelection);
+        layout->addWidget(listWidget);
+
+        // Buttons
+        QDialogButtonBox* buttonBox = new QDialogButtonBox(
+            QDialogButtonBox::Ok | QDialogButtonBox::Cancel,
+            Qt::Horizontal, this
+        );
+        buttonBox->setStyleSheet(
+            "QPushButton {"
+            "  background-color: #007AFF;"
+            "  color: white;"
+            "  border: none;"
+            "  border-radius: 6px;"
+            "  padding: 8px 16px;"
+            "  font-size: 13px;"
+            "  font-weight: 500;"
+            "  min-width: 60px;"
+            "}"
+            "QPushButton:hover {"
+            "  background-color: #0056CC;"
+            "}"
+            "QPushButton:pressed {"
+            "  background-color: #004494;"
+            "}"
+            "QPushButton[text=\"Cancel\"] {"
+            "  background-color: #F2F2F2;"
+            "  color: #1D1D1F;"
+            "}"
+            "QPushButton[text=\"Cancel\"]:hover {"
+            "  background-color: #E5E5EA;"
+            "}"
+        );
+        layout->addWidget(buttonBox);
+
+        // Populate list
+        updateProjectList();
+
+        // Connect signals
+        connect(searchEdit, &QLineEdit::textChanged, this, &ProjectSelectionDialog::onSearchTextChanged);
+        connect(listWidget, &QListWidget::itemClicked, this, &ProjectSelectionDialog::onItemClicked);
+        connect(listWidget, &QListWidget::itemDoubleClicked, this, &QDialog::accept);
+        connect(buttonBox, &QDialogButtonBox::accepted, this, &QDialog::accept);
+        connect(buttonBox, &QDialogButtonBox::rejected, this, &QDialog::reject);
+    }
+
+    QString selectedProjectName() const {
+        QListWidgetItem* item = listWidget->currentItem();
+        if (item) {
+            return item->text();
+        }
+        return QString();
+    }
+
+private slots:
+    void onSearchTextChanged(const QString& text) {
+        listWidget->clear();
+        for (const auto& project : allProjects) {
+            QString projectName = project.second;
+            if (text.isEmpty() || projectName.contains(text, Qt::CaseInsensitive)) {
+                QListWidgetItem* item = new QListWidgetItem(projectName);
+                item->setData(Qt::UserRole, project.first);
+                listWidget->addItem(item);
+            }
+        }
+    }
+
+    void onItemClicked(QListWidgetItem* item) {
+        listWidget->setCurrentItem(item);
+    }
+
+private:
+    void updateProjectList() {
+        listWidget->clear();
+        for (const auto& project : allProjects) {
+            QListWidgetItem* item = new QListWidgetItem(project.second);
+            item->setData(Qt::UserRole, project.first);
+            listWidget->addItem(item);
+        }
+    }
+
+    QLineEdit* searchEdit;
+    QListWidget* listWidget;
+    QList<QPair<int, QString>> allProjects;
 };
 
 // Database management class
@@ -104,6 +244,7 @@ public:
                       "payee_name TEXT, "
                       "payee_tax_id TEXT, "
                       "project_name TEXT, "
+                      "invoice_project_name TEXT, "
                       "amount REAL, "
                       "tax_rate TEXT, "
                       "tax_amount REAL, "
@@ -217,8 +358,8 @@ public:
 
     bool addInvoice(const Invoice& invoice) {
         QSqlQuery query;
-        query.prepare("INSERT INTO invoices (invoice_number, invoice_date, payer_name, payer_tax_id, payee_name, payee_tax_id, project_name, amount, tax_rate, tax_amount, file_path, status) "
-                      "VALUES (:invoice_number, :invoice_date, :payer_name, :payer_tax_id, :payee_name, :payee_tax_id, :project_name, :amount, :tax_rate, :tax_amount, :file_path, :status)");
+        query.prepare("INSERT INTO invoices (invoice_number, invoice_date, payer_name, payer_tax_id, payee_name, payee_tax_id, project_name, invoice_project_name, amount, tax_rate, tax_amount, file_path, status) "
+                      "VALUES (:invoice_number, :invoice_date, :payer_name, :payer_tax_id, :payee_name, :payee_tax_id, :project_name, :invoice_project_name, :amount, :tax_rate, :tax_amount, :file_path, :status)");
 
         query.bindValue(":invoice_number", invoice.invoiceNumber);
         query.bindValue(":invoice_date", invoice.invoiceDate);
@@ -227,6 +368,7 @@ public:
         query.bindValue(":payee_name", invoice.payeeName);
         query.bindValue(":payee_tax_id", invoice.payeeTaxId);
         query.bindValue(":project_name", invoice.projectName);
+        query.bindValue(":invoice_project_name", invoice.invoiceProjectName);
         query.bindValue(":amount", invoice.amount);
         query.bindValue(":tax_rate", QString("%1%").arg(invoice.taxRate));
         query.bindValue(":tax_amount", invoice.taxAmount);
@@ -255,6 +397,7 @@ public:
             inv.payeeName = query.value("payee_name").toString();
             inv.payeeTaxId = query.value("payee_tax_id").toString();
             inv.projectName = query.value("project_name").toString();
+            inv.invoiceProjectName = query.value("invoice_project_name").toString();
             inv.amount = query.value("amount").toDouble();
             QString taxRateStr = query.value("tax_rate").toString();
             taxRateStr.remove('%');
@@ -284,6 +427,7 @@ public:
             inv.payeeName = query.value("payee_name").toString();
             inv.payeeTaxId = query.value("payee_tax_id").toString();
             inv.projectName = query.value("project_name").toString();
+            inv.invoiceProjectName = query.value("invoice_project_name").toString();
             inv.amount = query.value("amount").toDouble();
             QString taxRateStr = query.value("tax_rate").toString();
             taxRateStr.remove('%');
@@ -366,6 +510,7 @@ public:
             inv.payeeName = query.value("payee_name").toString();
             inv.payeeTaxId = query.value("payee_tax_id").toString();
             inv.projectName = query.value("project_name").toString();
+            inv.invoiceProjectName = query.value("invoice_project_name").toString();
             inv.amount = query.value("amount").toDouble();
             QString taxRateStr = query.value("tax_rate").toString();
             taxRateStr.remove('%');
@@ -377,6 +522,49 @@ public:
         }
 
         return inv;
+    }
+
+    // 按项目名称获取发票列表
+    QList<Invoice> getInvoicesByProjectName(const QString& projectName) {
+        QList<Invoice> invoices;
+        QSqlQuery query;
+        query.prepare("SELECT * FROM invoices WHERE project_name = :project_name ORDER BY import_date DESC");
+        query.bindValue(":project_name", projectName);
+
+        if (query.exec()) {
+            while (query.next()) {
+                Invoice inv;
+                inv.id = query.value("id").toInt();
+                inv.invoiceNumber = query.value("invoice_number").toString();
+                inv.invoiceDate = query.value("invoice_date").toString();
+                inv.payerName = query.value("payer_name").toString();
+                inv.payerTaxId = query.value("payer_tax_id").toString();
+                inv.payeeName = query.value("payee_name").toString();
+                inv.payeeTaxId = query.value("payee_tax_id").toString();
+                inv.projectName = query.value("project_name").toString();
+                inv.invoiceProjectName = query.value("invoice_project_name").toString();
+                inv.amount = query.value("amount").toDouble();
+                QString taxRateStr = query.value("tax_rate").toString();
+                taxRateStr.remove('%');
+                inv.taxRate = taxRateStr.toDouble();
+                inv.taxAmount = query.value("tax_amount").toDouble();
+                inv.filePath = query.value("file_path").toString();
+                inv.importDate = query.value("import_date").toDateTime();
+                inv.status = query.value("status").toString();
+                invoices.append(inv);
+            }
+        }
+
+        return invoices;
+    }
+
+    // 更新发票的项目分配
+    bool assignInvoiceToProject(int invoiceId, const QString& projectName) {
+        QSqlQuery query;
+        query.prepare("UPDATE invoices SET project_name = :project_name WHERE id = :id");
+        query.bindValue(":project_name", projectName);
+        query.bindValue(":id", invoiceId);
+        return query.exec();
     }
 
 private:
@@ -1561,7 +1749,9 @@ private slots:
         invoice.payerTaxId = fields.payerTaxId;
         invoice.payeeName = fields.payeeName;
         invoice.payeeTaxId = fields.payeeTaxId;
-        invoice.projectName = fields.projectName;
+        // 如果有选中的报销项目，则使用该项目名称；否则为空（未分配项目）
+        invoice.projectName = selectedProjectFilter;
+        invoice.invoiceProjectName = fields.projectName;  // 保存发票上的项目名称
         invoice.amount = fields.amount;
         invoice.taxRate = fields.taxRate;
         invoice.taxAmount = fields.taxAmount;
@@ -1642,7 +1832,7 @@ private:
         projectHeaderLayout->setContentsMargins(0, 0, 0, 0);
         projectHeaderLayout->setSpacing(0);
 
-        QLabel* projectsLabel = new QLabel("项目");
+        QLabel* projectsLabel = new QLabel("报销项目");
         projectsLabel->setStyleSheet("font-size: 11px; font-weight: 600; color: #86868B;");
         projectHeaderLayout->addWidget(projectsLabel);
 
@@ -1679,33 +1869,6 @@ private:
         layout->addWidget(projectsContainer);
 
         layout->addStretch();
-
-        QFrame* userFrame = new QFrame;
-        userFrame->setStyleSheet("border-top: 1px solid #D1D1D1; padding-top: 12px;");
-        QHBoxLayout* userLayout = new QHBoxLayout(userFrame);
-        userLayout->setContentsMargins(0, 0, 0, 0);
-
-        QLabel* avatar = new QLabel("管");
-        avatar->setFixedSize(32, 32);
-        avatar->setStyleSheet("background-color: #007AFF; color: white; border-radius: 16px; font-size: 12px; font-weight: bold;");
-        avatar->setAlignment(Qt::AlignCenter);
-
-        QVBoxLayout* userInfoLayout = new QVBoxLayout;
-        userInfoLayout->setContentsMargins(0, 0, 0, 0);
-        userInfoLayout->setSpacing(0);
-        QLabel* nameLabel = new QLabel("张经理");
-        nameLabel->setStyleSheet("font-size: 12px; font-weight: 500; color: #1D1D1F;");
-        QLabel* roleLabel = new QLabel("企业账户");
-        roleLabel->setStyleSheet("font-size: 10px; color: #86868B;");
-
-        userInfoLayout->addWidget(nameLabel);
-        userInfoLayout->addWidget(roleLabel);
-
-        userLayout->addWidget(avatar);
-        userLayout->addLayout(userInfoLayout);
-        userLayout->addStretch();
-
-        layout->addWidget(userFrame);
 
         return sidebar;
     }
@@ -1787,12 +1950,13 @@ private:
         headerLayout->addWidget(invoiceTitleLabel);
 
         statusLabel = new QLabel("");
-        statusLabel->setStyleSheet("font-size: 10px; color: #8E8E93; background-color: #E5E5EA; padding: 4px 10px; border-radius: 10px; font-weight: 500;");
+        statusLabel->setFixedHeight(20);
+        statusLabel->setStyleSheet("font-size: 10px; color: transparent; background-color: transparent; padding: 2px 8px; border-radius: 10px; font-weight: 500;");
         headerLayout->addWidget(statusLabel);
 
         headerLayout->addStretch();
 
-        QStringList buttons = {"+ 添加", "导入", "导出", "打印", "发送"};
+        QStringList buttons = {"导入", "导出", "打印"};
         for (const QString& btn : buttons) {
             QPushButton* button = new QPushButton(btn);
             button->setStyleSheet("background-color: transparent; border: 1px solid #D1D1D1; border-radius: 6px; padding: 6px 12px; font-size: 12px; color: #1D1D1F;");
@@ -1826,7 +1990,7 @@ private:
         return detailWidget;
     }
 
-    void refreshInvoiceList() {
+    void refreshInvoiceList(const QString& filterProject = QString()) {
         // Clear existing items
         QLayoutItem* child;
         while ((child = listContentLayout->takeAt(0)) != nullptr) {
@@ -1836,10 +2000,18 @@ private:
             delete child;
         }
 
-        QList<Invoice> invoices = db.getAllInvoices();
+        QList<Invoice> invoices;
+        if (filterProject.isEmpty()) {
+            invoices = db.getAllInvoices();
+        } else {
+            invoices = db.getInvoicesByProjectName(filterProject);
+        }
 
         if (invoices.isEmpty()) {
-            QLabel* emptyLabel = new QLabel("暂无发票\n点击右上角导入按钮添加");
+            QString emptyText = filterProject.isEmpty()
+                ? "暂无发票\n点击右上角导入按钮添加"
+                : "该项目暂无发票\n请分配发票到该项目";
+            QLabel* emptyLabel = new QLabel(emptyText);
             emptyLabel->setAlignment(Qt::AlignCenter);
             emptyLabel->setStyleSheet("font-size: 14px; color: #86868B; padding: 50px;");
             listContentLayout->addWidget(emptyLabel);
@@ -1885,51 +2057,43 @@ private:
 
         layout->addLayout(headerLayout);
 
-        QHBoxLayout* infoLayout = new QHBoxLayout;
-        infoLayout->setSpacing(0);
+        // Second row: invoice number | project name (报销项目)
+        QHBoxLayout* secondRowLayout = new QHBoxLayout;
+        secondRowLayout->setSpacing(0);
 
         QLabel* invoiceLabel = new QLabel(invoice.invoiceNumber);
         invoiceLabel->setStyleSheet("font-size: 11px; color: #86868B;");
-        infoLayout->addWidget(invoiceLabel);
-        infoLayout->addStretch();
+        secondRowLayout->addWidget(invoiceLabel);
 
-        QString statusColor, statusBg;
-        if (invoice.status == "已支付") {
-            statusColor = "#34C759";
-            statusBg = "#D4EDDA";
-        } else if (invoice.status == "已逾期") {
-            statusColor = "#FF3B30";
-            statusBg = "#F8D7DA";
-        } else if (invoice.status == "待处理") {
-            statusColor = "#FF9500";
-            statusBg = "#FFF3CD";
-        } else {
-            statusColor = "#8E8E93";
-            statusBg = "#E5E5EA";
-        }
+        secondRowLayout->addStretch();
 
-        QString statusText = invoice.status;
-        if (statusText == "draft") statusText = "草稿";
-        else if (statusText == "paid") statusText = "已支付";
-        else if (statusText == "overdue") statusText = "已逾期";
-        else if (statusText == "pending") statusText = "待处理";
+        // Display报销项目 (assigned project name or "未分配项目")
+        QString projectDisplayText = invoice.projectName.isEmpty() ? "未分配项目" : invoice.projectName;
+        QString projectColor = invoice.projectName.isEmpty() ? "#8E8E93" : "#007AFF";
+        QString projectBg = invoice.projectName.isEmpty() ? "#E5E5EA" : "#E8F2FF";
+        QLabel* projectLabel = new QLabel(projectDisplayText);
+        projectLabel->setStyleSheet(QString("font-size: 10px; color: %1; background-color: %2; padding: 2px 8px; border-radius: 10px; font-weight: 500;").arg(projectColor).arg(projectBg));
+        secondRowLayout->addWidget(projectLabel);
 
-        QLabel* statusLabel = new QLabel(statusText);
-        statusLabel->setStyleSheet(QString("font-size: 10px; color: %1; background-color: %2; padding: 2px 8px; border-radius: 10px; font-weight: 500;").arg(statusColor).arg(statusBg));
-        infoLayout->addWidget(statusLabel);
+        layout->addLayout(secondRowLayout);
 
-        layout->addLayout(infoLayout);
+        // Third row: invoice project name (from PDF) | amount
+        QHBoxLayout* thirdRowLayout = new QHBoxLayout;
+        thirdRowLayout->setSpacing(0);
 
-        QLabel* descLabel = new QLabel(invoice.projectName);
-        descLabel->setStyleSheet("font-size: 12px; color: #86868B;");
-        layout->addWidget(descLabel);
+        // Display invoice project name (from PDF metadata)
+        QString invoiceProjectDisplay = invoice.invoiceProjectName.isEmpty() ? "服务项目" : invoice.invoiceProjectName;
+        QLabel* invoiceProjectLabel = new QLabel(invoiceProjectDisplay);
+        invoiceProjectLabel->setStyleSheet("font-size: 12px; color: #1D1D1F;");
+        thirdRowLayout->addWidget(invoiceProjectLabel);
 
-        QHBoxLayout* amountLayout = new QHBoxLayout;
+        thirdRowLayout->addStretch();
+
         QLabel* amountLabel = new QLabel(QString("¥%1").arg(invoice.amount, 0, 'f', 2));
         amountLabel->setStyleSheet("font-size: 12px; font-weight: 500; color: #007AFF;");
-        amountLayout->addStretch();
-        amountLayout->addWidget(amountLabel);
-        layout->addLayout(amountLayout);
+        thirdRowLayout->addWidget(amountLabel);
+
+        layout->addLayout(thirdRowLayout);
 
         // Click event
         item->setMouseTracking(true);
@@ -1940,6 +2104,12 @@ private:
             invoiceItemMap.remove(item);
         });
         invoiceItemMap[item] = invoice.id;
+
+        // Add right-click context menu
+        item->setContextMenuPolicy(Qt::CustomContextMenu);
+        connect(item, &QWidget::customContextMenuRequested, [this, invoice](const QPoint& pos) {
+            onInvoiceContextMenuRequested(invoice.id, QCursor::pos());
+        });
 
         return item;
     }
@@ -1954,31 +2124,24 @@ private:
             delete child;
         }
 
-        // Update header
+        // Update header - only show invoice number
         invoiceTitleLabel->setText(invoice.invoiceNumber);
 
-        QString statusText = invoice.status;
-        if (statusText == "draft") statusText = "草稿";
-        else if (statusText == "paid") statusText = "已支付";
-        else if (statusText == "overdue") statusText = "已逾期";
-        else if (statusText == "pending") statusText = "待处理";
-        statusLabel->setText(statusText);
+        // Display报销项目名称 in status label
+        QString projectDisplayText = invoice.projectName.isEmpty() ? "未分配项目" : invoice.projectName;
+        statusLabel->setText(projectDisplayText);
 
         QString statusColor, statusBg;
-        if (invoice.status == "paid" || invoice.status == "已支付") {
-            statusColor = "#34C759";
-            statusBg = "#D4EDDA";
-        } else if (invoice.status == "overdue" || invoice.status == "已逾期") {
-            statusColor = "#FF3B30";
-            statusBg = "#F8D7DA";
-        } else if (invoice.status == "pending" || invoice.status == "待处理") {
-            statusColor = "#FF9500";
-            statusBg = "#FFF3CD";
-        } else {
+        if (invoice.projectName.isEmpty()) {
+            // 未分配项目 - 灰色
             statusColor = "#8E8E93";
             statusBg = "#E5E5EA";
+        } else {
+            // 已分配项目 - 蓝色
+            statusColor = "#007AFF";
+            statusBg = "#E8F2FF";
         }
-        statusLabel->setStyleSheet(QString("font-size: 10px; color: %1; background-color: %2; padding: 4px 10px; border-radius: 10px; font-weight: 500;").arg(statusColor).arg(statusBg));
+        statusLabel->setStyleSheet(QString("font-size: 10px; color: %1; background-color: %2; padding: 2px 8px; border-radius: 10px; font-weight: 500;").arg(statusColor).arg(statusBg));
 
         // ===== PDF Preview Section =====
         QFrame* pdfFrame = new QFrame;
@@ -2019,6 +2182,12 @@ private:
                     // Scale to fit width while maintaining aspect ratio
                     int maxWidth = detailScrollArea->width() - 100;
                     if (maxWidth < 400) maxWidth = 400;
+                    // Dynamic max width based on window height to prevent overflow
+                    int windowHeight = this->height();
+                    int dynamicMaxWidth = (windowHeight - 250) * 3 / 4; // Assume A4 ratio (3:4)
+                    if (dynamicMaxWidth < 400) dynamicMaxWidth = 400;
+                    if (dynamicMaxWidth > 600) dynamicMaxWidth = 600;
+                    if (maxWidth > dynamicMaxWidth) maxWidth = dynamicMaxWidth;
                     if (pixmap.width() > maxWidth) {
                         pixmap = pixmap.scaledToWidth(maxWidth, Qt::SmoothTransformation);
                     }
@@ -2076,7 +2245,7 @@ private:
         editPayerTaxId = new QLineEdit(invoice.payerTaxId);
         editPayeeName = new QLineEdit(invoice.payeeName);
         editPayeeTaxId = new QLineEdit(invoice.payeeTaxId);
-        editProjectName = new QLineEdit(invoice.projectName);
+        editProjectName = new QLineEdit(invoice.invoiceProjectName);
 
         editAmount = new QDoubleSpinBox;
         editAmount->setMaximum(999999999.99);
@@ -2411,6 +2580,10 @@ private:
     QPointer<QLineEdit> editingProjectEdit = nullptr; // 当前正在编辑的项目控件（使用QPointer安全指针）
     int editingProjectId = -1;               // 当前正在编辑的项目ID（-1表示新增）
 
+    // Project filtering
+    QString selectedProjectFilter;  // 当前筛选的项目名称，空表示显示全部
+    QPointer<QPushButton> selectedProjectButton;  // 当前高亮的项目按钮
+
     // Editable fields for invoice metadata
     QLineEdit* editInvoiceNumber;
     QLineEdit* editInvoiceDate;
@@ -2434,6 +2607,12 @@ private slots:
     void startRenameProject(int projectId, const QString& currentName, QWidget* projectWidget = nullptr);
     void deleteProject(int projectId);
     void refreshProjectsList();
+
+    // ========== 发票项目分配相关槽函数 ==========
+    void onInvoiceContextMenuRequested(int invoiceId, const QPoint& globalPos);
+    void onAssignProjectToInvoice(int invoiceId);
+    void onProjectButtonClicked(const QString& projectName, QPushButton* btn);
+    void onDeleteInvoice(int invoiceId);
 };
 
 // ========== InvoiceManagerWindow 方法实现 ==========
@@ -2451,7 +2630,7 @@ void InvoiceManagerWindow::onSaveInvoiceChanges() {
     invoice.payerTaxId = editPayerTaxId->text();
     invoice.payeeName = editPayeeName->text();
     invoice.payeeTaxId = editPayeeTaxId->text();
-    invoice.projectName = editProjectName->text();
+    invoice.invoiceProjectName = editProjectName->text();
     invoice.amount = editAmount->value();
     invoice.taxRate = editTaxRate->value();
     invoice.taxAmount = editTaxAmount->value();
@@ -2461,7 +2640,7 @@ void InvoiceManagerWindow::onSaveInvoiceChanges() {
     query.prepare("UPDATE invoices SET invoice_number = :invoice_number, invoice_date = :invoice_date, "
                   "payer_name = :payer_name, payer_tax_id = :payer_tax_id, "
                   "payee_name = :payee_name, payee_tax_id = :payee_tax_id, "
-                  "project_name = :project_name, amount = :amount, "
+                  "invoice_project_name = :invoice_project_name, amount = :amount, "
                   "tax_rate = :tax_rate, tax_amount = :tax_amount "
                   "WHERE id = :id");
     query.bindValue(":invoice_number", invoice.invoiceNumber);
@@ -2470,7 +2649,7 @@ void InvoiceManagerWindow::onSaveInvoiceChanges() {
     query.bindValue(":payer_tax_id", invoice.payerTaxId);
     query.bindValue(":payee_name", invoice.payeeName);
     query.bindValue(":payee_tax_id", invoice.payeeTaxId);
-    query.bindValue(":project_name", invoice.projectName);
+    query.bindValue(":invoice_project_name", invoice.invoiceProjectName);
     query.bindValue(":amount", invoice.amount);
     query.bindValue(":tax_rate", QString("%1%").arg(invoice.taxRate));
     query.bindValue(":tax_amount", invoice.taxAmount);
@@ -2758,6 +2937,11 @@ void InvoiceManagerWindow::refreshProjectsList() {
             onProjectContextMenuRequested(projectId, projectName, btn->mapToGlobal(pos));
         });
 
+        // 设置左键点击处理
+        connect(btn, &QPushButton::clicked, [this, projectName, btn]() {
+            onProjectButtonClicked(projectName, btn);
+        });
+
         // 在 stretch 之前插入
         int insertIndex = projectsLayout->count();
         if (insertIndex > 0) {
@@ -2780,6 +2964,192 @@ void InvoiceManagerWindow::refreshProjectsList() {
     }
     if (!hasStretch) {
         projectsLayout->addStretch();
+    }
+}
+
+// ========== 发票项目分配相关方法实现 ==========
+
+void InvoiceManagerWindow::onInvoiceContextMenuRequested(int invoiceId, const QPoint& globalPos) {
+    QMenu menu(this);
+    QAction* assignAction = menu.addAction("分配到项目");
+    menu.addSeparator();
+    QAction* deleteAction = menu.addAction("删除发票");
+
+    // 设置菜单样式（保持与项目右键菜单一致）
+    menu.setStyleSheet(
+        "QMenu {"
+        "  background-color: white;"
+        "  border: 1px solid #E5E5EA;"
+        "  border-radius: 8px;"
+        "  padding: 8px;"
+        "}"
+        "QMenu::item {"
+        "  padding: 8px 20px;"
+        "  font-size: 13px;"
+        "  color: #1D1D1F;"
+        "  border-radius: 6px;"
+        "}"
+        "QMenu::item:selected {"
+        "  background-color: #E8F2FF;"
+        "  color: #007AFF;"
+        "}"
+    );
+
+    QAction* selected = menu.exec(globalPos);
+    if (selected == assignAction) {
+        onAssignProjectToInvoice(invoiceId);
+    } else if (selected == deleteAction) {
+        onDeleteInvoice(invoiceId);
+    }
+}
+
+void InvoiceManagerWindow::onAssignProjectToInvoice(int invoiceId) {
+    // 获取所有项目
+    QList<QPair<int, QString>> projects = db.getAllProjects();
+    if (projects.isEmpty()) {
+        QMessageBox::information(this, "提示", "暂无可用项目，请先创建项目。");
+        return;
+    }
+
+    // 弹出项目选择对话框
+    ProjectSelectionDialog dialog(projects, this);
+    if (dialog.exec() == QDialog::Accepted) {
+        QString selectedProject = dialog.selectedProjectName();
+        if (!selectedProject.isEmpty()) {
+            if (db.assignInvoiceToProject(invoiceId, selectedProject)) {
+                refreshInvoiceList(selectedProjectFilter);  // 保持当前筛选
+                // 如果当前选中的是这个发票，更新详情页
+                if (currentInvoiceId == invoiceId) {
+                    Invoice inv = db.getInvoiceById(invoiceId);
+                    updateDetailView(inv);
+                }
+            } else {
+                QMessageBox::warning(this, "分配失败", "无法将发票分配到项目。");
+            }
+        }
+    }
+}
+
+void InvoiceManagerWindow::onProjectButtonClicked(const QString& projectName, QPushButton* btn) {
+    // 正常按钮样式
+    QString normalStyle =
+        "QPushButton {"
+        "  background-color: transparent;"
+        "  color: #1D1D1F;"
+        "  border: none;"
+        "  border-radius: 6px;"
+        "  text-align: left;"
+        "  padding-left: 10px;"
+        "  font-size: 13px;"
+        "  font-weight: 400;"
+        "}"
+        "QPushButton:hover {"
+        "  background-color: #F2F2F2;"
+        "}";
+
+    // 高亮样式
+    QString highlightedStyle =
+        "QPushButton {"
+        "  background-color: #007AFF;"
+        "  color: white;"
+        "  border: none;"
+        "  border-radius: 6px;"
+        "  text-align: left;"
+        "  padding-left: 10px;"
+        "  font-size: 13px;"
+        "  font-weight: 500;"
+        "}";
+
+    // 如果点击的是已选中的项目，则取消筛选
+    if (selectedProjectFilter == projectName) {
+        selectedProjectFilter.clear();
+        // 恢复按钮样式
+        if (selectedProjectButton) {
+            selectedProjectButton->setStyleSheet(normalStyle);
+        }
+        selectedProjectButton = nullptr;
+        refreshInvoiceList(QString());  // 显示全部
+    } else {
+        // 取消之前选中的按钮高亮
+        if (selectedProjectButton) {
+            selectedProjectButton->setStyleSheet(normalStyle);
+        }
+        // 高亮当前按钮
+        selectedProjectFilter = projectName;
+        selectedProjectButton = btn;
+        btn->setStyleSheet(highlightedStyle);
+        refreshInvoiceList(projectName);  // 筛选显示
+    }
+}
+
+void InvoiceManagerWindow::onDeleteInvoice(int invoiceId) {
+    // 获取发票信息以显示详情
+    Invoice invoice = db.getInvoiceById(invoiceId);
+    if (invoice.id <= 0) {
+        QMessageBox::warning(this, "删除失败", "无法获取发票信息。");
+        return;
+    }
+
+    // 确认对话框
+    QString msg = QString("确定要删除以下发票吗？\n\n"
+                          "发票号码：%1\n"
+                          "销售方：%2\n"
+                          "金额：¥%3\n\n"
+                          "删除后将无法恢复，同时会删除原始发票文件。")
+                          .arg(invoice.invoiceNumber)
+                          .arg(invoice.payeeName)
+                          .arg(invoice.amount, 0, 'f', 2);
+
+    QMessageBox msgBox(this);
+    msgBox.setWindowTitle("确认删除");
+    msgBox.setText(msg);
+    msgBox.setIcon(QMessageBox::Question);
+    QPushButton* yesButton = msgBox.addButton("是", QMessageBox::YesRole);
+    QPushButton* noButton = msgBox.addButton("否", QMessageBox::NoRole);
+    msgBox.setDefaultButton(noButton);
+    msgBox.exec();
+
+    if (msgBox.clickedButton() != yesButton) {
+        return;
+    }
+
+    // 删除原始文件
+    QString filePath = invoice.filePath;
+    if (!filePath.isEmpty() && QFile::exists(filePath)) {
+        if (!QFile::remove(filePath)) {
+            qDebug() << "Failed to delete file:" << filePath;
+            // 继续删除数据库记录，即使文件删除失败
+        }
+    }
+
+    // 删除数据库记录
+    if (db.deleteInvoice(invoiceId)) {
+        // 如果删除的是当前选中的发票，清空详情页
+        if (currentInvoiceId == invoiceId) {
+            currentInvoiceId = -1;
+            // 重置详情页为空白状态
+            invoiceTitleLabel->setText("请选择发票");
+            statusLabel->setText("");
+            // 清空详情内容
+            QLayoutItem* child;
+            while ((child = detailContentLayout->takeAt(0)) != nullptr) {
+                if (child->widget()) {
+                    delete child->widget();
+                }
+                delete child;
+            }
+            QLabel* emptyLabel = new QLabel("从左侧选择一张发票查看详情");
+            emptyLabel->setAlignment(Qt::AlignCenter);
+            emptyLabel->setStyleSheet("font-size: 16px; color: #86868B; margin-top: 100px;");
+            detailContentLayout->addWidget(emptyLabel);
+        }
+
+        // 刷新发票列表
+        refreshInvoiceList(selectedProjectFilter);
+
+        QMessageBox::information(this, "删除成功", "发票已成功删除。");
+    } else {
+        QMessageBox::critical(this, "删除失败", "无法删除发票，请重试。");
     }
 }
 
