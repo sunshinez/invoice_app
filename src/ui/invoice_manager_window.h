@@ -42,6 +42,11 @@
 #include <QProgressDialog>
 #include <QProgressBar>
 #include <QHash>
+#include <QCheckBox>
+#include <QSet>
+#include <QPdfWriter>
+#include <QProcess>
+#include <QRandomGenerator>
 
 #include "../data/invoice_database.h"
 #include "../services/async_pdf_processor.h"
@@ -118,6 +123,26 @@ private:
     QString pendingImportFilePath;
     QProgressDialog* progressDialog;
 
+    // ========== 发票选择模式相关成员 ==========
+    bool selectionMode = false;
+    QSet<int> selectedInvoiceIds;
+    QWidget* selectionToolbar = nullptr;
+    QHash<int, QCheckBox*> invoiceCheckboxes;
+    QHash<QCheckBox*, QWidget*> checkboxToItemMap;
+    int currentSelectedProjectIdForExport = -1;
+    QLabel* selectionCountLabel = nullptr;
+
+    // ========== 选择模式辅助方法 ==========
+    QWidget* createSelectionToolbar();
+    void showSelectionToolbar();
+    void hideSelectionToolbar();
+    void refreshInvoiceListWithCheckboxes();
+    QWidget* createInvoiceItemWidgetWithCheckbox(const Invoice& invoice, bool active);
+    void exportInvoicesToPdf(const QList<Invoice>& invoices, const QString& filePath);
+    QPixmap renderPdfPageToPixmap(const QString& pdfPath, const QSize& targetSize);
+    QPixmap createPlaceholderPixmap(const QSize& size, const QString& text);
+    void updateSelectionCountLabel();
+
 private slots:
     void onSaveInvoiceChanges();
 
@@ -138,6 +163,15 @@ private slots:
     // ========== 异步处理槽函数 ==========
     void onImportCompleted();
     void onPreviewCompleted();
+
+    // ========== 发票选择和导出相关槽函数 ==========
+    void onToggleSelectionMode();
+    void onEnterSelectionMode();
+    void onExitSelectionMode();
+    void onSelectAllInvoices();
+    void onDeselectAllInvoices();
+    void onInvoiceSelectionChanged(int invoiceId, bool checked);
+    void onExportClicked();
 };
 
 #endif // INVOICE_MANAGER_WINDOW_H

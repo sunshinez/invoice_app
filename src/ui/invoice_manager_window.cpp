@@ -273,6 +273,9 @@ QWidget* InvoiceManagerWindow::createDetailWidget() {
         if (btn == "导入") {
             qDebug() << "Connecting import button";
             connect(button, &QPushButton::clicked, this, &InvoiceManagerWindow::onImportClicked);
+        } else if (btn == "导出") {
+            qDebug() << "Connecting export button";
+            connect(button, &QPushButton::clicked, this, &InvoiceManagerWindow::onExportClicked);
         }
 
         headerLayout->addWidget(button);
@@ -932,34 +935,78 @@ void InvoiceManagerWindow::refreshProjectsList() {
 
 void InvoiceManagerWindow::onInvoiceContextMenuRequested(int invoiceId, const QPoint& globalPos) {
     QMenu menu(this);
-    QAction* assignAction = menu.addAction("分配到项目");
-    menu.addSeparator();
-    QAction* deleteAction = menu.addAction("删除发票");
 
-    menu.setStyleSheet(
-        "QMenu {"
-        "  background-color: white;"
-        "  border: 1px solid #E5E5EA;"
-        "  border-radius: 8px;"
-        "  padding: 8px;"
-        "}"
-        "QMenu::item {"
-        "  padding: 8px 20px;"
-        "  font-size: 13px;"
-        "  color: #1D1D1F;"
-        "  border-radius: 6px;"
-        "}"
-        "QMenu::item:selected {"
-        "  background-color: #E8F2FF;"
-        "  color: #007AFF;"
-        "}"
-    );
+    // 根据是否处于选择模式显示不同选项
+    if (selectionMode) {
+        // 选择模式下显示"取消选择"选项
+        QAction* exitSelectionAction = menu.addAction("取消选择");
+        menu.addSeparator();
+        QAction* assignAction = menu.addAction("分配到项目");
+        menu.addSeparator();
+        QAction* deleteAction = menu.addAction("删除发票");
 
-    QAction* selected = menu.exec(globalPos);
-    if (selected == assignAction) {
-        onAssignProjectToInvoice(invoiceId);
-    } else if (selected == deleteAction) {
-        onDeleteInvoice(invoiceId);
+        menu.setStyleSheet(
+            "QMenu {"
+            "  background-color: white;"
+            "  border: 1px solid #E5E5EA;"
+            "  border-radius: 8px;"
+            "  padding: 8px;"
+            "}"
+            "QMenu::item {"
+            "  padding: 8px 20px;"
+            "  font-size: 13px;"
+            "  color: #1D1D1F;"
+            "  border-radius: 6px;"
+            "}"
+            "QMenu::item:selected {"
+            "  background-color: #E8F2FF;"
+            "  color: #007AFF;"
+            "}"
+        );
+
+        QAction* selected = menu.exec(globalPos);
+        if (selected == exitSelectionAction) {
+            onExitSelectionMode();
+        } else if (selected == assignAction) {
+            onAssignProjectToInvoice(invoiceId);
+        } else if (selected == deleteAction) {
+            onDeleteInvoice(invoiceId);
+        }
+    } else {
+        // 非选择模式下显示"选择发票"选项
+        QAction* enterSelectionAction = menu.addAction("选择发票");
+        menu.addSeparator();
+        QAction* assignAction = menu.addAction("分配到项目");
+        menu.addSeparator();
+        QAction* deleteAction = menu.addAction("删除发票");
+
+        menu.setStyleSheet(
+            "QMenu {"
+            "  background-color: white;"
+            "  border: 1px solid #E5E5EA;"
+            "  border-radius: 8px;"
+            "  padding: 8px;"
+            "}"
+            "QMenu::item {"
+            "  padding: 8px 20px;"
+            "  font-size: 13px;"
+            "  color: #1D1D1F;"
+            "  border-radius: 6px;"
+            "}"
+            "QMenu::item:selected {"
+            "  background-color: #E8F2FF;"
+            "  color: #007AFF;"
+            "}"
+        );
+
+        QAction* selected = menu.exec(globalPos);
+        if (selected == enterSelectionAction) {
+            onEnterSelectionMode();
+        } else if (selected == assignAction) {
+            onAssignProjectToInvoice(invoiceId);
+        } else if (selected == deleteAction) {
+            onDeleteInvoice(invoiceId);
+        }
     }
 }
 
@@ -1193,4 +1240,619 @@ void InvoiceManagerWindow::onImportCompleted() {
         QMessageBox::critical(this, "导入失败", "保存发票信息到数据库失败。");
         QFile::remove(pendingImportFilePath);
     }
+}
+
+// ========== 发票选择模式相关方法实现 ==========
+
+QWidget* InvoiceManagerWindow::createSelectionToolbar() {
+    QWidget* toolbar = new QWidget(this);
+    toolbar->setFixedHeight(48);
+    toolbar->setStyleSheet(
+        "QWidget {"
+        "  background-color: white;"
+        "  border: none;"
+        "}"
+        "QPushButton {"
+        "  background-color: #007AFF;"
+        "  color: white;"
+        "  border: none;"
+        "  border-radius: 6px;"
+        "  padding: 6px 16px;"
+        "  font-size: 13px;"
+        "  font-weight: 500;"
+        "}"
+        "QPushButton:hover {"
+        "  background-color: #0051D5;"
+        "}"
+        "QPushButton#deselectBtn {"
+        "  background-color: transparent;"
+        "  color: #007AFF;"
+        "  border: 1px solid #007AFF;"
+        "}"
+        "QPushButton#deselectBtn:hover {"
+        "  background-color: #E8F2FF;"
+        "}"
+        "QLabel {"
+        "  font-size: 13px;"
+        "  color: #1D1D1F;"
+        "  font-weight: 500;"
+        "}"
+    );
+
+    QHBoxLayout* layout = new QHBoxLayout(toolbar);
+    layout->setContentsMargins(16, 8, 16, 8);
+    layout->setSpacing(12);
+
+    // 选择计数标签
+    selectionCountLabel = new QLabel("已选择 0 张发票");
+    layout->addWidget(selectionCountLabel);
+
+    layout->addStretch();
+
+    // 取消全选按钮
+    QPushButton* deselectAllBtn = new QPushButton("取消全选");
+    deselectAllBtn->setObjectName("deselectBtn");
+    connect(deselectAllBtn, &QPushButton::clicked, this, &InvoiceManagerWindow::onDeselectAllInvoices);
+    layout->addWidget(deselectAllBtn);
+
+    // 全选按钮
+    QPushButton* selectAllBtn = new QPushButton("全选");
+    connect(selectAllBtn, &QPushButton::clicked, this, &InvoiceManagerWindow::onSelectAllInvoices);
+    layout->addWidget(selectAllBtn);
+
+    return toolbar;
+}
+
+void InvoiceManagerWindow::showSelectionToolbar() {
+    if (!selectionToolbar) {
+        selectionToolbar = createSelectionToolbar();
+    }
+
+    // 将工具栏插入到listWidget的搜索栏和滚动区域之间
+    QWidget* listWidget = listScrollArea->parentWidget();
+    if (listWidget) {
+        QVBoxLayout* layout = qobject_cast<QVBoxLayout*>(listWidget->layout());
+        if (layout) {
+            // 插入到索引1的位置（搜索栏之后）
+            layout->insertWidget(1, selectionToolbar);
+            selectionToolbar->show();
+        }
+    }
+}
+
+void InvoiceManagerWindow::hideSelectionToolbar() {
+    if (selectionToolbar) {
+        selectionToolbar->hide();
+        QWidget* listWidget = listScrollArea->parentWidget();
+        if (listWidget) {
+            QVBoxLayout* layout = qobject_cast<QVBoxLayout*>(listWidget->layout());
+            if (layout) {
+                layout->removeWidget(selectionToolbar);
+            }
+        }
+    }
+}
+
+void InvoiceManagerWindow::updateSelectionCountLabel() {
+    if (selectionCountLabel) {
+        selectionCountLabel->setText(QString("已选择 %1 张发票").arg(selectedInvoiceIds.size()));
+    }
+}
+
+void InvoiceManagerWindow::onEnterSelectionMode() {
+    if (selectionMode) return;
+
+    // Ensure we have a valid project context
+    int targetProjectId = (selectedProjectId != -1) ? selectedProjectId : currentSelectedProjectIdForExport;
+    if (targetProjectId == -1) {
+        // If no project is selected, show a message and return
+        QMessageBox::information(this, "选择发票", "请先选择一个报销项目");
+        return;
+    }
+
+    selectionMode = true;
+    currentSelectedProjectIdForExport = targetProjectId;
+    selectedInvoiceIds.clear();
+    invoiceCheckboxes.clear();
+    checkboxToItemMap.clear();
+
+    showSelectionToolbar();
+    updateSelectionCountLabel();
+    refreshInvoiceListWithCheckboxes();
+}
+
+void InvoiceManagerWindow::onExitSelectionMode() {
+    if (!selectionMode) return;
+
+    selectionMode = false;
+    selectedInvoiceIds.clear();
+    invoiceCheckboxes.clear();
+    checkboxToItemMap.clear();
+
+    hideSelectionToolbar();
+    refreshInvoiceList(selectedProjectId);
+}
+
+void InvoiceManagerWindow::onToggleSelectionMode() {
+    if (selectionMode) {
+        onExitSelectionMode();
+    } else {
+        onEnterSelectionMode();
+    }
+}
+
+void InvoiceManagerWindow::onSelectAllInvoices() {
+    // 获取当前显示的发票列表
+    QList<Invoice> invoices;
+    if (currentSelectedProjectIdForExport == -1) {
+        invoices = db.getAllInvoices();
+    } else {
+        invoices = db.getInvoicesByProjectId(currentSelectedProjectIdForExport);
+    }
+
+    // 将所有发票ID添加到选中集合
+    for (const auto& invoice : invoices) {
+        selectedInvoiceIds.insert(invoice.id);
+    }
+
+    // 更新所有checkbox状态
+    for (auto it = invoiceCheckboxes.begin(); it != invoiceCheckboxes.end(); ++it) {
+        it.value()->setChecked(true);
+    }
+
+    // 更新所有项的背景色
+    for (auto it = checkboxToItemMap.begin(); it != checkboxToItemMap.end(); ++it) {
+        it.value()->setStyleSheet("background-color: #E8F2FF; border-bottom: 1px solid #E5E5EA;");
+    }
+
+    updateSelectionCountLabel();
+}
+
+void InvoiceManagerWindow::onDeselectAllInvoices() {
+    selectedInvoiceIds.clear();
+
+    // 更新所有checkbox状态
+    for (auto it = invoiceCheckboxes.begin(); it != invoiceCheckboxes.end(); ++it) {
+        it.value()->setChecked(false);
+    }
+
+    // 恢复所有项的背景色
+    for (auto it = checkboxToItemMap.begin(); it != checkboxToItemMap.end(); ++it) {
+        it.value()->setStyleSheet("background-color: white; border-bottom: 1px solid #E5E5EA;");
+    }
+
+    updateSelectionCountLabel();
+}
+
+void InvoiceManagerWindow::onInvoiceSelectionChanged(int invoiceId, bool checked) {
+    if (checked) {
+        selectedInvoiceIds.insert(invoiceId);
+    } else {
+        selectedInvoiceIds.remove(invoiceId);
+    }
+
+    updateSelectionCountLabel();
+
+    // 更新对应项的背景色
+    if (invoiceCheckboxes.contains(invoiceId)) {
+        QCheckBox* checkbox = invoiceCheckboxes[invoiceId];
+        if (checkboxToItemMap.contains(checkbox)) {
+            QWidget* item = checkboxToItemMap[checkbox];
+            if (item) {
+                QString bgColor = checked ? "#E8F2FF" : "white";
+                item->setStyleSheet(QString("background-color: %1; border-bottom: 1px solid #E5E5EA;").arg(bgColor));
+            }
+        }
+    }
+}
+
+void InvoiceManagerWindow::refreshInvoiceListWithCheckboxes() {
+    if (!listContentLayout) return;
+
+    // 清空现有内容
+    QLayoutItem* child;
+    while ((child = listContentLayout->takeAt(0)) != nullptr) {
+        if (child->widget()) {
+            delete child->widget();
+        }
+        delete child;
+    }
+    invoiceItemMap.clear();
+    invoiceCheckboxes.clear();
+    checkboxToItemMap.clear();
+
+    // 获取发票列表
+    QList<Invoice> invoices;
+    if (currentSelectedProjectIdForExport == -1) {
+        invoices = db.getAllInvoices();
+    } else {
+        invoices = db.getInvoicesByProjectId(currentSelectedProjectIdForExport);
+    }
+
+    // 创建带checkbox的发票项
+    for (const auto& invoice : invoices) {
+        bool active = (invoice.id == currentInvoiceId);
+        QWidget* item = createInvoiceItemWidgetWithCheckbox(invoice, active);
+        if (item) {
+            listContentLayout->addWidget(item);
+        }
+    }
+
+    listContentLayout->addStretch();
+}
+
+QWidget* InvoiceManagerWindow::createInvoiceItemWidgetWithCheckbox(const Invoice& invoice, bool active) {
+    QWidget* container = new QWidget(listContent);
+    container->setMinimumHeight(84);
+    container->setMaximumHeight(96);
+    container->setCursor(Qt::PointingHandCursor);
+
+    QString bgColor = active ? "#F6F6F6" : "white";
+    if (selectedInvoiceIds.contains(invoice.id)) {
+        bgColor = "#E8F2FF";
+    }
+    container->setStyleSheet(QString("background-color: %1; border-bottom: 1px solid #E5E5EA;").arg(bgColor));
+
+    QHBoxLayout* mainLayout = new QHBoxLayout(container);
+    mainLayout->setContentsMargins(16, 10, 12, 10);
+    mainLayout->setSpacing(16);
+
+    // Checkbox
+    QCheckBox* checkbox = new QCheckBox(container);
+    checkbox->setFixedSize(20, 20);
+    checkbox->setStyleSheet(
+        "QCheckBox {"
+        "  spacing: 0px;"
+        "  margin: 0px;"
+        "  padding: 0px;"
+        "  border: none;"
+        "  background: transparent;"
+        "}"
+        "QCheckBox::indicator {"
+        "  width: 16px;"
+        "  height: 16px;"
+        "  border-radius: 8px;"
+        "  border: 2px solid #007AFF;"
+        "  background-color: transparent;"
+        "}"
+        "QCheckBox::indicator:checked {"
+        "  background-color: #007AFF;"
+        "  image: none;"
+        "}"
+        "QCheckBox::indicator:hover {"
+        "  background-color: #E8F2FF;"
+        "}"
+    );
+    checkbox->setChecked(selectedInvoiceIds.contains(invoice.id));
+
+    // 使用lambda捕获invoice.id
+    int invId = invoice.id;
+    connect(checkbox, &QCheckBox::checkStateChanged, [this, invId](Qt::CheckState state) {
+        onInvoiceSelectionChanged(invId, state == Qt::Checked);
+    });
+
+    invoiceCheckboxes[invoice.id] = checkbox;
+    mainLayout->addWidget(checkbox);
+
+    // 发票信息区域（垂直布局）
+    QWidget* infoWidget = new QWidget(container);
+    infoWidget->setStyleSheet("background-color: transparent; border: none;");
+    QVBoxLayout* infoLayout = new QVBoxLayout(infoWidget);
+    infoLayout->setContentsMargins(0, 0, 0, 0);
+    infoLayout->setSpacing(2);
+    infoLayout->setAlignment(Qt::AlignVCenter);
+
+    // 第一行：销售方名称 + 导入日期
+    QHBoxLayout* firstRowLayout = new QHBoxLayout;
+    firstRowLayout->setSpacing(0);
+
+    QLabel* payeeLabel = new QLabel(invoice.payeeName.isEmpty() ? "未知销售方" : invoice.payeeName);
+    payeeLabel->setStyleSheet("font-size: 13px; font-weight: 600; color: #1D1D1F;");
+    firstRowLayout->addWidget(payeeLabel);
+
+    firstRowLayout->addStretch();
+
+    QLabel* dateLabel = new QLabel(invoice.importDate.toString("yyyy-MM-dd"));
+    dateLabel->setStyleSheet("font-size: 11px; color: #8E8E93;");
+    firstRowLayout->addWidget(dateLabel);
+
+    infoLayout->addLayout(firstRowLayout);
+
+    // 第二行：发票号码 + 报销项目标签
+    QHBoxLayout* secondRowLayout = new QHBoxLayout;
+    secondRowLayout->setSpacing(8);
+
+    QLabel* numberLabel = new QLabel(invoice.invoiceNumber.isEmpty() ? "未知号码" : invoice.invoiceNumber);
+    numberLabel->setStyleSheet("font-size: 12px; color: #3A3A3C;");
+    secondRowLayout->addWidget(numberLabel);
+
+    QString projectDisplayText = invoice.projectName.isEmpty() ? "未分配项目" : invoice.projectName;
+    QString projectColor = invoice.projectName.isEmpty() ? "#8E8E93" : "#007AFF";
+    QString projectBg = invoice.projectName.isEmpty() ? "#E5E5EA" : "#E8F2FF";
+    QLabel* projectLabel = new QLabel(projectDisplayText);
+    // 根据文字长度动态计算最大宽度（10px字体，每字符约7px + 内边距12px）
+    int textWidth = projectDisplayText.length() * 7 + 12;
+    int maxWidth = qMin(textWidth, 80);  // 最大80px
+    projectLabel->setMaximumWidth(maxWidth);
+    projectLabel->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
+    projectLabel->setWordWrap(false);
+    projectLabel->setStyleSheet(QString("font-size: 10px; color: %1; background-color: %2; padding: 2px 6px; border-radius: 10px; font-weight: 500;").arg(projectColor).arg(projectBg));
+    secondRowLayout->addWidget(projectLabel);
+
+    infoLayout->addLayout(secondRowLayout);
+
+    // 第三行：发票项目名称 + 金额
+    QHBoxLayout* thirdRowLayout = new QHBoxLayout;
+    thirdRowLayout->setSpacing(0);
+
+    QString invoiceProjectDisplay = invoice.invoiceProjectName.isEmpty() ? "服务项目" : invoice.invoiceProjectName;
+    QLabel* invoiceProjectLabel = new QLabel(invoiceProjectDisplay);
+    invoiceProjectLabel->setStyleSheet("font-size: 12px; color: #1D1D1F;");
+    thirdRowLayout->addWidget(invoiceProjectLabel);
+
+    thirdRowLayout->addStretch();
+
+    QLabel* amountLabel = new QLabel(QString("¥%1").arg(invoice.amount, 0, 'f', 2));
+    amountLabel->setStyleSheet("font-size: 12px; font-weight: 500; color: #007AFF;");
+    thirdRowLayout->addWidget(amountLabel);
+
+    infoLayout->addLayout(thirdRowLayout);
+
+    mainLayout->addWidget(infoWidget, 1);
+
+    // 存储映射关系
+    invoiceItemMap[container] = invoice.id;
+    checkboxToItemMap[checkbox] = container;
+
+    // Click event - 点击非checkbox区域时切换选择
+    container->setMouseTracking(true);
+    container->installEventFilter(this);
+
+    // 右键菜单
+    container->setContextMenuPolicy(Qt::CustomContextMenu);
+    connect(container, &QWidget::customContextMenuRequested, [this, invoice](const QPoint& pos) {
+        onInvoiceContextMenuRequested(invoice.id, QCursor::pos());
+    });
+
+    return container;
+}
+
+// ========== 发票导出功能实现 ==========
+
+void InvoiceManagerWindow::onExportClicked() {
+    // 验证1：是否选择了报销项目
+    if (selectedProjectId == -1) {
+        QMessageBox::information(this, "导出发票", "请先选择报销项目");
+        return;
+    }
+
+    QList<Invoice> invoicesToExport;
+
+    // 确定要导出的发票列表
+    if (selectionMode && !selectedInvoiceIds.isEmpty()) {
+        // 使用选中的发票
+        for (int id : selectedInvoiceIds) {
+            Invoice inv = db.getInvoiceById(id);
+            if (inv.id > 0) {
+                invoicesToExport.append(inv);
+            }
+        }
+    } else if (selectionMode && selectedInvoiceIds.isEmpty()) {
+        // 选择模式但未选发票，询问是否导出全部
+        auto reply = QMessageBox::question(this, "导出发票",
+            "未选择发票，是否导出当前项目所有发票？",
+            QMessageBox::Yes | QMessageBox::No);
+        if (reply == QMessageBox::No) {
+            return;
+        }
+        invoicesToExport = db.getInvoicesByProjectId(selectedProjectId);
+    } else {
+        // 非选择模式，导出当前项目所有发票
+        invoicesToExport = db.getInvoicesByProjectId(selectedProjectId);
+    }
+
+    // 验证2：是否有发票数据
+    if (invoicesToExport.isEmpty()) {
+        QMessageBox::information(this, "导出发票", "当前报销项目中没有发票数据，请确认。");
+        return;
+    }
+
+    // 获取保存路径 - 使用非原生对话框避免macOS兼容问题
+    QString defaultName = QString("%1_%2.pdf")
+        .arg(selectedProjectName)
+        .arg(QDate::currentDate().toString("yyyyMMdd"));
+
+    QFileDialog saveDialog(this, "导出发票", QDir::homePath() + "/" + defaultName, "PDF文件 (*.pdf)");
+    saveDialog.setAcceptMode(QFileDialog::AcceptSave);
+    saveDialog.setDefaultSuffix("pdf");
+    saveDialog.setOption(QFileDialog::DontUseNativeDialog, true);
+
+    QString filePath;
+    if (saveDialog.exec() == QDialog::Accepted) {
+        filePath = saveDialog.selectedFiles().first();
+    }
+
+    if (filePath.isEmpty()) {
+        return;
+    }
+
+    // 确保文件扩展名是.pdf
+    if (!filePath.endsWith(".pdf", Qt::CaseInsensitive)) {
+        filePath += ".pdf";
+    }
+
+    // 执行导出
+    exportInvoicesToPdf(invoicesToExport, filePath);
+}
+
+void InvoiceManagerWindow::exportInvoicesToPdf(const QList<Invoice>& invoices, const QString& filePath) {
+    QPdfWriter pdfWriter(filePath);
+    pdfWriter.setPageSize(QPageSize(QPageSize::A4));
+    pdfWriter.setResolution(150);  // 使用150 DPI获得更好质量
+
+    QPainter painter(&pdfWriter);
+    painter.setRenderHint(QPainter::Antialiasing);
+
+    // A4 在150 DPI下的尺寸: 1240 x 1754
+    const int pageWidth = 1240;
+    const int pageHeight = 1754;
+    const int margin = 60;  // 边距
+    const int spacing = 30; // 虚线间隔
+
+    // A5 区域尺寸 (A4的一半高度减去间隔)
+    const int a5Width = pageWidth - 2 * margin;   // 1120
+    const int a5Height = (pageHeight - 2 * margin - spacing) / 2;  // 832
+
+    int currentInvoiceIndex = 0;
+    bool firstPage = true;
+
+    while (currentInvoiceIndex < invoices.size()) {
+        if (!firstPage) {
+            pdfWriter.newPage();
+        }
+        firstPage = false;
+
+        // 第一张发票
+        if (currentInvoiceIndex < invoices.size()) {
+            const Invoice& inv1 = invoices[currentInvoiceIndex];
+            QPixmap pixmap1 = renderPdfPageToPixmap(inv1.filePath,
+                QSize(a5Width, a5Height));
+
+            if (!pixmap1.isNull()) {
+                // 计算居中位置
+                int x1 = margin + (a5Width - pixmap1.width()) / 2;
+                int y1 = margin + (a5Height - pixmap1.height()) / 2;
+                painter.drawPixmap(x1, y1, pixmap1);
+            }
+
+            currentInvoiceIndex++;
+        }
+
+        // 绘制虚线（始终在页面中间显示，无论是否有第二张发票）
+        painter.save();
+        QPen pen(Qt::gray);
+        pen.setStyle(Qt::DashLine);
+        pen.setWidth(2);
+        painter.setPen(pen);
+
+        int lineY = margin + a5Height + spacing / 2;
+        painter.drawLine(margin, lineY, pageWidth - margin, lineY);
+        painter.restore();
+
+        // 第二张发票
+        if (currentInvoiceIndex < invoices.size()) {
+            const Invoice& inv2 = invoices[currentInvoiceIndex];
+            QPixmap pixmap2 = renderPdfPageToPixmap(inv2.filePath,
+                QSize(a5Width, a5Height));
+
+            if (!pixmap2.isNull()) {
+                // 计算居中位置
+                int x2 = margin + (a5Width - pixmap2.width()) / 2;
+                int y2 = margin + a5Height + spacing + (a5Height - pixmap2.height()) / 2;
+                painter.drawPixmap(x2, y2, pixmap2);
+            }
+
+            currentInvoiceIndex++;
+        }
+    }
+
+    painter.end();
+
+    // 显示成功提示
+    QMessageBox::information(this, "导出成功",
+        QString("发票已导出到:\n%1").arg(filePath));
+}
+
+QPixmap InvoiceManagerWindow::renderPdfPageToPixmap(const QString& pdfPath, const QSize& targetSize) {
+    // 检查文件是否存在
+    if (!QFile::exists(pdfPath)) {
+        qDebug() << "PDF file not found:" << pdfPath;
+        return createPlaceholderPixmap(targetSize, "文件不存在");
+    }
+
+    // 生成临时文件名
+    QString tempFileName = QString("invoice_export_%1_%2")
+        .arg(QDateTime::currentDateTime().toString("yyyyMMddhhmmss"))
+        .arg(QRandomGenerator::global()->generate() % 10000);
+    QString tempPngPath = QDir::tempPath() + "/" + tempFileName + ".png";
+
+    // 使用 pdftoppm 将PDF第一页转为图片
+    // 参数说明：
+    // -png: 输出PNG格式
+    // -f 1 -l 1: 只处理第1页
+    // -scale-to-x: 水平缩放到指定像素
+    // -aa-vector: 开启矢量抗锯齿
+    // -r: 设置分辨率
+    QStringList args;
+    args << "-png" << "-f" << "1" << "-l" << "1";
+    args << "-singlefile";  // 输出单文件，不添加页码后缀
+    args << "-scale-to-x" << QString::number(targetSize.width());
+    args << "-r" << "150";  // 150 DPI
+    args << "-aaVector" << "yes";
+    args << pdfPath;
+    args << tempFileName;
+
+    QProcess process;
+    process.setWorkingDirectory(QDir::tempPath());
+    process.start("pdftoppm", args);
+
+    if (!process.waitForFinished(30000)) {  // 最多等待30秒
+        qDebug() << "pdftoppm timeout or error:" << process.errorString();
+        process.kill();
+        return createPlaceholderPixmap(targetSize, "处理超时");
+    }
+
+    if (process.exitCode() != 0) {
+        qDebug() << "pdftoppm failed:" << process.readAllStandardError();
+        return createPlaceholderPixmap(targetSize, "转换失败");
+    }
+
+    // -singlefile 选项输出格式为: tempFileName.png (不带页码后缀)
+    QPixmap pixmap;
+    if (QFile::exists(tempPngPath)) {
+        pixmap.load(tempPngPath);
+        QFile::remove(tempPngPath);
+    } else {
+        // 尝试其他可能的文件名格式 (如 pdftoppm 添加了 -1 后缀)
+        QString altPath = QDir::tempPath() + "/" + tempFileName + "-1.png";
+        if (QFile::exists(altPath)) {
+            pixmap.load(altPath);
+            QFile::remove(altPath);
+        } else {
+            // 尝试查找任何匹配的文件
+            QDir tempDir(QDir::tempPath());
+            QStringList filters;
+            filters << tempFileName + "*.png";
+            QStringList files = tempDir.entryList(filters, QDir::Files);
+            if (!files.isEmpty()) {
+                QString foundFile = QDir::tempPath() + "/" + files.first();
+                pixmap.load(foundFile);
+                QFile::remove(foundFile);
+            }
+        }
+    }
+
+    // 如果图片加载成功，按需要缩放（保持纵横比）
+    if (!pixmap.isNull() && (pixmap.width() > targetSize.width() || pixmap.height() > targetSize.height())) {
+        pixmap = pixmap.scaled(targetSize, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+    }
+
+    if (pixmap.isNull()) {
+        return createPlaceholderPixmap(targetSize, "无法加载");
+    }
+
+    return pixmap;
+}
+
+QPixmap InvoiceManagerWindow::createPlaceholderPixmap(const QSize& size, const QString& text) {
+    QPixmap pixmap(size);
+    pixmap.fill(Qt::white);
+
+    QPainter painter(&pixmap);
+    painter.setPen(Qt::darkGray);
+    painter.drawRect(0, 0, size.width() - 1, size.height() - 1);
+    painter.drawText(pixmap.rect(), Qt::AlignCenter, text);
+    painter.end();
+
+    return pixmap;
 }
