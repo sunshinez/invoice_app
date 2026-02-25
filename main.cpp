@@ -1601,7 +1601,7 @@ private:
         if (!label) label = findByText(positions, "买", Qt::CaseInsensitive);
 
         if (label) {
-            // Look for "名称" near this label
+            // Strategy 1: Look for "名称" below this label (traditional layout)
             auto* nameLabel = findNearest(positions, label->x, label->y + 30, 100, 50);
             if (nameLabel && nameLabel->text.contains("名称")) {
                 // Company name should be to the right or below
@@ -1625,9 +1625,26 @@ private:
                     }
                 }
             }
+
+            // Strategy 2: Search to the right of label (for new layout where "名称" is on the same row)
+            // Some invoices have layout: "买 名称：xxx" where "买" is at left and "名称" is to its right
+            qDebug() << "DEBUG main.cpp: Strategy 2 - searching at x=" << label->x + 30 << "y=" << label->y;
+            nameLabel = findNearest(positions, label->x + 30, label->y, 80, 40);
+            qDebug() << "DEBUG main.cpp: Strategy 2 - found nameLabel:" << (nameLabel ? nameLabel->text : "null");
+            if (nameLabel && nameLabel->text.contains("名称")) {
+                auto* name = findRightOf(positions, *nameLabel, 400, 30);
+                qDebug() << "DEBUG main.cpp: Strategy 2 - found name:" << (name ? name->text : "null");
+                if (name) {
+                    QString companyName = name->text.trimmed();
+                    companyName = companyName.split(" ").first();
+                    if (companyName.length() >= 2 && companyName.length() <= 100) {
+                        return companyName;
+                    }
+                }
+            }
         }
 
-        // Strategy 2: Look for region in left portion of page where buyer info typically is
+        // Strategy 3: Look for region in left portion of page where buyer info typically is
         // Chinese invoices typically have buyer info on left side, upper middle
         for (auto& pos : positions) {
             if (pos.x < 500 && pos.y > 100 && pos.y < 400) {
@@ -1658,7 +1675,7 @@ private:
         if (!label) label = findByText(positions, "售", Qt::CaseInsensitive);
 
         if (label) {
-            // Look for "名称" near this label
+            // Strategy 1: Look for "名称" below this label (traditional layout)
             auto* nameLabel = findNearest(positions, label->x, label->y + 30, 100, 50);
             if (nameLabel && nameLabel->text.contains("名称")) {
                 // Company name should be to the right
@@ -1681,9 +1698,22 @@ private:
                     }
                 }
             }
+
+            // Strategy 2: Search to the right of label (for new layout where "名称" is on the same row)
+            nameLabel = findNearest(positions, label->x + 30, label->y, 80, 40);
+            if (nameLabel && nameLabel->text.contains("名称")) {
+                auto* name = findRightOf(positions, *nameLabel, 400, 30);
+                if (name) {
+                    QString companyName = name->text.trimmed();
+                    companyName = companyName.split(" ").first();
+                    if (companyName.length() >= 2 && companyName.length() <= 100) {
+                        return companyName;
+                    }
+                }
+            }
         }
 
-        // Strategy 2: Look for region in right portion or lower portion
+        // Strategy 3: Look for region in right portion or lower portion
         for (auto& pos : positions) {
             if (pos.y > 200 && pos.y < 600) {
                 if (pos.text.contains("名称") && pos.text.length() < 10) {

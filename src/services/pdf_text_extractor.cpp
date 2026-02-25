@@ -501,9 +501,14 @@ QString PdfTextExtractor::extractPayerNamePosition(QList<TextPosition>& position
     if (!label) label = findByText(positions, "买", Qt::CaseInsensitive);
 
     if (label) {
+        qDebug() << "DEBUG: Found buyer label:" << label->text << "at x=" << label->x << "y=" << label->y;
+
+        // Strategy 1: Search down from label (for traditional layout where "名称" is below "购买方")
         TextPosition* nameLabel = findNearest(positions, label->x, label->y + 30, 100, 50);
+        qDebug() << "DEBUG: Strategy 1 (down) nameLabel:" << (nameLabel ? nameLabel->text : "null");
         if (nameLabel && nameLabel->text.contains("名称")) {
             TextPosition* name = findRightOf(positions, *nameLabel, 400, 30);
+            qDebug() << "DEBUG: Strategy 1 found name:" << (name ? name->text : "null");
             if (name) {
                 QString companyName = name->text.trimmed();
                 companyName = companyName.split(" ").first();
@@ -521,12 +526,36 @@ QString PdfTextExtractor::extractPayerNamePosition(QList<TextPosition>& position
                 }
             }
         }
+
+        // Strategy 2: Search to the right of label (for new layout where "名称" is on the same row or slightly above)
+        // Some invoices have layout: "买 名称：xxx" where "买" is at left and "名称" is to its right
+        nameLabel = findNearest(positions, label->x + 30, label->y, 80, 40);
+        qDebug() << "DEBUG: Strategy 2 (right) nameLabel:" << (nameLabel ? nameLabel->text : "null");
+        if (nameLabel && nameLabel->text.contains("名称")) {
+            TextPosition* name = findRightOf(positions, *nameLabel, 400, 30);
+            qDebug() << "DEBUG: Strategy 2 found name:" << (name ? name->text : "null");
+            if (name) {
+                QString companyName = name->text.trimmed();
+                companyName = companyName.split(" ").first();
+                if (companyName.length() >= 2 && companyName.length() <= 100) {
+                    return companyName;
+                }
+            }
+        }
     }
 
+    // Strategy 3: Fallback - look for "名称" label in left portion of page
+    // Must match exact "名称" or "名称：" but not "项目名称" or other variants
     for (auto& pos : positions) {
         if (pos.x < 500 && pos.y > 100 && pos.y < 400) {
-            if (pos.text.contains("名称") && pos.text.length() < 10) {
+            QString trimmed = pos.text.trimmed();
+            // Check if it's exactly "名称" or "名称：" (not "项目名称" etc.)
+            bool isNameLabel = (trimmed == "名称" || trimmed == "名称：" ||
+                               (trimmed.startsWith("名称") && trimmed.length() <= 4));
+            if (isNameLabel) {
                 TextPosition* name = findRightOf(positions, pos, 400, 30);
+                qDebug() << "DEBUG: Strategy 3 (fallback) found '名称' at x=" << pos.x << "y=" << pos.y
+                         << "nameLabel:" << pos.text << "right content:" << (name ? name->text : "null");
                 if (name) {
                     QString companyName = name->text.trimmed();
                     companyName = companyName.split(" ").first();
@@ -538,6 +567,7 @@ QString PdfTextExtractor::extractPayerNamePosition(QList<TextPosition>& position
         }
     }
 
+    qDebug() << "DEBUG: All strategies failed for buyer name";
     return QString();
 }
 
@@ -550,6 +580,7 @@ QString PdfTextExtractor::extractPayeeNamePosition(QList<TextPosition>& position
     if (!label) label = findByText(positions, "售", Qt::CaseInsensitive);
 
     if (label) {
+        // Strategy 1: Search down from label (for traditional layout)
         TextPosition* nameLabel = findNearest(positions, label->x, label->y + 30, 100, 50);
         if (nameLabel && nameLabel->text.contains("名称")) {
             TextPosition* name = findRightOf(positions, *nameLabel, 400, 30);
@@ -562,6 +593,19 @@ QString PdfTextExtractor::extractPayeeNamePosition(QList<TextPosition>& position
             }
 
             name = findBelow(positions, *nameLabel, 50, 200);
+            if (name) {
+                QString companyName = name->text.trimmed();
+                companyName = companyName.split(" ").first();
+                if (companyName.length() >= 2 && companyName.length() <= 100) {
+                    return companyName;
+                }
+            }
+        }
+
+        // Strategy 2: Search to the right of label (for new layout where "名称" is on the same row)
+        nameLabel = findNearest(positions, label->x + 30, label->y, 80, 40);
+        if (nameLabel && nameLabel->text.contains("名称")) {
+            TextPosition* name = findRightOf(positions, *nameLabel, 400, 30);
             if (name) {
                 QString companyName = name->text.trimmed();
                 companyName = companyName.split(" ").first();
