@@ -47,6 +47,11 @@
 #include <QScrollBar>
 #include <QDesktopServices>
 #include <QUrl>
+#include <QtConcurrent>
+#include <QFuture>
+#include <QFutureWatcher>
+#include <QProgressDialog>
+#include <QProgressBar>
 #include <pugixml.hpp>
 
 // Invoice data structure
@@ -58,7 +63,8 @@ struct Invoice {
     QString payerTaxId;
     QString payeeName;
     QString payeeTaxId;
-    QString projectName;        // 报销项目（用户分配的）
+    int projectId;              // 报销项目ID（外键，-1表示未分配）
+    QString projectName;        // 报销项目名称（仅显示用）
     QString invoiceProjectName; // 发票上的项目名称（从PDF提取的）
     double amount;
     double taxRate;
@@ -174,6 +180,14 @@ public:
         return QString();
     }
 
+    int selectedProjectId() const {
+        QListWidgetItem* item = listWidget->currentItem();
+        if (item) {
+            return item->data(Qt::UserRole).toInt();
+        }
+        return -1;
+    }
+
 private slots:
     void onSearchTextChanged(const QString& text) {
         listWidget->clear();
@@ -233,7 +247,276 @@ public:
         return createTables();
     }
 
+    // ========== Schema Version & Migration Management ==========
+
+    int getCurrentSchemaVersion() {
+        QSqlQuery query;
+        // Check if schema_version table exists
+        query.exec("SELECT name FROM sqlite_master WHERE type='table' AND name='schema_version'");
+        if (!query.next()) {
+            return 0; // No schema_version table, assume version 0
+        }
+        query.exec("SELECT version FROM schema_version ORDER BY updated_at DESC LIMIT 1");
+        if (query.next()) {
+            return query.value(0).toInt();
+        }
+        return 0;
+    }
+
+    bool createSchemaVersionTable() {
+        QSqlQuery query;
+        QString sql = "CREATE TABLE IF NOT EXISTS schema_version ("
+                      "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                      "version INTEGER NOT NULL, "
+                      "description TEXT, "
+                      "updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
+                      ")";
+        if (!query.exec(sql)) {
+            qDebug() << "Failed to create schema_version table:" << query.lastError().text();
+            return false;
+        }
+        return true;
+    }
+
+    bool updateSchemaVersion(int version, const QString& description) {
+        QSqlQuery query;
+        query.prepare("INSERT INTO schema_version (version, description) VALUES (:version, :description)");
+        query.bindValue(":version", version);
+        query.bindValue(":description", description);
+        if (!query.exec()) {
+            qDebug() << "Failed to update schema version:" << query.lastError().text();
+            return false;
+        }
+        qDebug() << "[Migration] Updated schema version to" << version << "-" << description;
+        return true;
+    }
+
+    bool backupDatabase() {
+        QString dbPath = db.databaseName();
+        QFileInfo dbFile(dbPath);
+        if (!dbFile.exists()) {
+            qDebug() << "[Backup] Database file not found, skipping backup";
+            return true;
+        }
+
+        QString backupDir = dbFile.dir().absolutePath();
+        QString timestamp = QDateTime::currentDateTime().toString("yyyyMMdd_HHmmss");
+        QString backupName = QString("invoices.db.bak_%1").arg(timestamp);
+        QString backupPath = backupDir + "/" + backupName;
+
+        // Close database before backup
+        QString dbName = db.connectionName();
+        db.close();
+
+        bool success = QFile::copy(dbPath, backupPath);
+
+        // Reopen database
+        db = QSqlDatabase::addDatabase("QSQLITE", dbName);
+        db.setDatabaseName(dbPath);
+        db.open();
+
+        if (success) {
+            qDebug() << "[Backup] Database backed up to:" << backupPath;
+        } else {
+            qDebug() << "[Backup] Failed to backup database to:" << backupPath;
+        }
+        return success;
+    }
+
+    // ========== Migration Functions ==========
+
+    bool migrateV1_AddProjectId() {
+        qDebug() << "[Migration V1] Starting migration to add project_id foreign key...";
+
+        QSqlQuery query;
+
+        // Check if invoices table has project_id column
+        query.exec("PRAGMA table_info(invoices)");
+        bool hasProjectId = false;
+        bool hasProjectName = false;
+        while (query.next()) {
+            QString colName = query.value("name").toString();
+            if (colName == "project_id") {
+                hasProjectId = true;
+            }
+            if (colName == "project_name") {
+                hasProjectName = true;
+            }
+        }
+
+        if (hasProjectId) {
+            qDebug() << "[Migration V1] project_id column already exists, skipping";
+            return true;
+        }
+
+        if (!hasProjectName) {
+            qDebug() << "[Migration V1] Neither project_id nor project_name exists. Table may be newly created.";
+            return true;
+        }
+
+        // Backup before migration
+        if (!backupDatabase()) {
+            qDebug() << "[Migration V1] Backup failed, aborting migration";
+            return false;
+        }
+
+        // Start transaction
+        if (!db.transaction()) {
+            qDebug() << "[Migration V1] Failed to start transaction";
+            return false;
+        }
+
+        try {
+            // Step 1: Create new invoices table with project_id
+            QString createNewTable = "CREATE TABLE invoices_new ("
+                                    "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                                    "invoice_number TEXT NOT NULL UNIQUE, "
+                                    "invoice_date TEXT, "
+                                    "payer_name TEXT, "
+                                    "payer_tax_id TEXT, "
+                                    "payee_name TEXT, "
+                                    "payee_tax_id TEXT, "
+                                    "project_id INTEGER, "
+                                    "invoice_project_name TEXT, "
+                                    "amount REAL, "
+                                    "tax_rate TEXT, "
+                                    "tax_amount REAL, "
+                                    "file_path TEXT, "
+                                    "import_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP, "
+                                    "status TEXT DEFAULT 'draft', "
+                                    "FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL"
+                                    ")";
+            if (!query.exec(createNewTable)) {
+                throw QString("Failed to create new invoices table: %1").arg(query.lastError().text());
+            }
+
+            // Step 2: Copy data with project_id mapping
+            QString copyData = "INSERT INTO invoices_new (id, invoice_number, invoice_date, payer_name, payer_tax_id, "
+                              "payee_name, payee_tax_id, project_id, invoice_project_name, amount, tax_rate, "
+                              "tax_amount, file_path, import_date, status) "
+                              "SELECT i.id, i.invoice_number, i.invoice_date, i.payer_name, i.payer_tax_id, "
+                              "i.payee_name, i.payee_tax_id, p.id, i.invoice_project_name, i.amount, i.tax_rate, "
+                              "i.tax_amount, i.file_path, i.import_date, i.status "
+                              "FROM invoices i "
+                              "LEFT JOIN projects p ON i.project_name = p.name";
+            if (!query.exec(copyData)) {
+                throw QString("Failed to copy data: %1").arg(query.lastError().text());
+            }
+
+            // Step 3: Get count for verification
+            query.exec("SELECT COUNT(*) FROM invoices");
+            int oldCount = query.next() ? query.value(0).toInt() : 0;
+            query.exec("SELECT COUNT(*) FROM invoices_new");
+            int newCount = query.next() ? query.value(0).toInt() : 0;
+
+            if (oldCount != newCount) {
+                throw QString("Data count mismatch: old=%1, new=%2").arg(oldCount).arg(newCount);
+            }
+
+            // Step 4: Drop old table and rename new table
+            if (!query.exec("DROP TABLE invoices")) {
+                throw QString("Failed to drop old table: %1").arg(query.lastError().text());
+            }
+            if (!query.exec("ALTER TABLE invoices_new RENAME TO invoices")) {
+                throw QString("Failed to rename table: %1").arg(query.lastError().text());
+            }
+
+            // Step 5: Create indexes
+            if (!query.exec("CREATE INDEX idx_invoices_project_id ON invoices(project_id)")) {
+                qDebug() << "[Migration V1] Warning: Failed to create project_id index:" << query.lastError().text();
+            }
+            if (!query.exec("CREATE INDEX idx_invoices_invoice_number ON invoices(invoice_number)")) {
+                qDebug() << "[Migration V1] Warning: Failed to create invoice_number index:" << query.lastError().text();
+            }
+
+            // Commit transaction
+            if (!db.commit()) {
+                throw QString("Failed to commit transaction: %1").arg(db.lastError().text());
+            }
+
+            qDebug() << "[Migration V1] Successfully migrated" << newCount << "invoices";
+            return true;
+
+        } catch (const QString& error) {
+            db.rollback();
+            qDebug() << "[Migration V1] Error:" << error;
+            return false;
+        }
+    }
+
+    bool runMigrations() {
+        int currentVersion = getCurrentSchemaVersion();
+        qDebug() << "[Migration] Current schema version:" << currentVersion;
+
+        // Migration V1: Add project_id foreign key
+        if (currentVersion < 1) {
+            if (!migrateV1_AddProjectId()) {
+                return false;
+            }
+            if (!updateSchemaVersion(1, "Add project_id foreign key to invoices")) {
+                return false;
+            }
+        }
+
+        qDebug() << "[Migration] All migrations completed successfully";
+        return true;
+    }
+
+    // ========== Audit Log ==========
+
+    bool createAuditLogTable() {
+        QSqlQuery query;
+        QString sql = "CREATE TABLE IF NOT EXISTS audit_logs ("
+                      "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                      "entity_type TEXT NOT NULL, "  // invoice/project
+                      "entity_id INTEGER, "
+                      "action TEXT NOT NULL, "       // import/update/delete/assign_project/add_project/rename_project/delete_project
+                      "before_json TEXT, "
+                      "after_json TEXT, "
+                      "result TEXT NOT NULL, "       // success/fail
+                      "message TEXT, "
+                      "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
+                      ")";
+        if (!query.exec(sql)) {
+            qDebug() << "Failed to create audit_logs table:" << query.lastError().text();
+            return false;
+        }
+
+        // Create index for faster queries
+        query.exec("CREATE INDEX idx_audit_logs_entity ON audit_logs(entity_type, entity_id)");
+        query.exec("CREATE INDEX idx_audit_logs_created_at ON audit_logs(created_at)");
+
+        return true;
+    }
+
+    bool logAudit(const QString& entityType, int entityId, const QString& action,
+                  const QString& beforeJson, const QString& afterJson,
+                  const QString& result, const QString& message = "") {
+        QSqlQuery query;
+        query.prepare("INSERT INTO audit_logs (entity_type, entity_id, action, before_json, after_json, result, message) "
+                      "VALUES (:entity_type, :entity_id, :action, :before_json, :after_json, :result, :message)");
+        query.bindValue(":entity_type", entityType);
+        query.bindValue(":entity_id", entityId);
+        query.bindValue(":action", action);
+        query.bindValue(":before_json", beforeJson);
+        query.bindValue(":after_json", afterJson);
+        query.bindValue(":result", result);
+        query.bindValue(":message", message);
+
+        if (!query.exec()) {
+            qDebug() << "[Audit] Failed to write audit log:" << query.lastError().text();
+            // Don't fail the main operation due to audit log failure
+            return false;
+        }
+        return true;
+    }
+
     bool createTables() {
+        // Create schema version table first
+        if (!createSchemaVersionTable()) {
+            return false;
+        }
+
         QSqlQuery query;
         QString sql = "CREATE TABLE IF NOT EXISTS invoices ("
                       "id INTEGER PRIMARY KEY AUTOINCREMENT, "
@@ -243,14 +526,15 @@ public:
                       "payer_tax_id TEXT, "
                       "payee_name TEXT, "
                       "payee_tax_id TEXT, "
-                      "project_name TEXT, "
+                      "project_id INTEGER, "
                       "invoice_project_name TEXT, "
                       "amount REAL, "
                       "tax_rate TEXT, "
                       "tax_amount REAL, "
                       "file_path TEXT, "
                       "import_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP, "
-                      "status TEXT DEFAULT 'draft' "
+                      "status TEXT DEFAULT 'draft', "
+                      "FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL"
                       ")";
 
         if (!query.exec(sql)) {
@@ -258,8 +542,22 @@ public:
             return false;
         }
 
+        // Create indexes
+        query.exec("CREATE INDEX idx_invoices_project_id ON invoices(project_id)");
+        query.exec("CREATE INDEX idx_invoices_invoice_number ON invoices(invoice_number)");
+
         // 创建项目表
         if (!createProjectsTable()) {
+            return false;
+        }
+
+        // 创建审计日志表
+        if (!createAuditLogTable()) {
+            return false;
+        }
+
+        // Run migrations
+        if (!runMigrations()) {
             return false;
         }
 
@@ -356,10 +654,10 @@ public:
         return false;
     }
 
-    bool addInvoice(const Invoice& invoice) {
+    bool addInvoice(const Invoice& invoice, int* newId = nullptr) {
         QSqlQuery query;
-        query.prepare("INSERT INTO invoices (invoice_number, invoice_date, payer_name, payer_tax_id, payee_name, payee_tax_id, project_name, invoice_project_name, amount, tax_rate, tax_amount, file_path, status) "
-                      "VALUES (:invoice_number, :invoice_date, :payer_name, :payer_tax_id, :payee_name, :payee_tax_id, :project_name, :invoice_project_name, :amount, :tax_rate, :tax_amount, :file_path, :status)");
+        query.prepare("INSERT INTO invoices (invoice_number, invoice_date, payer_name, payer_tax_id, payee_name, payee_tax_id, project_id, invoice_project_name, amount, tax_rate, tax_amount, file_path, status) "
+                      "VALUES (:invoice_number, :invoice_date, :payer_name, :payer_tax_id, :payee_name, :payee_tax_id, :project_id, :invoice_project_name, :amount, :tax_rate, :tax_amount, :file_path, :status)");
 
         query.bindValue(":invoice_number", invoice.invoiceNumber);
         query.bindValue(":invoice_date", invoice.invoiceDate);
@@ -367,7 +665,7 @@ public:
         query.bindValue(":payer_tax_id", invoice.payerTaxId);
         query.bindValue(":payee_name", invoice.payeeName);
         query.bindValue(":payee_tax_id", invoice.payeeTaxId);
-        query.bindValue(":project_name", invoice.projectName);
+        query.bindValue(":project_id", invoice.projectId > 0 ? invoice.projectId : QVariant());
         query.bindValue(":invoice_project_name", invoice.invoiceProjectName);
         query.bindValue(":amount", invoice.amount);
         query.bindValue(":tax_rate", QString("%1%").arg(invoice.taxRate));
@@ -380,12 +678,16 @@ public:
             return false;
         }
 
+        if (newId) {
+            *newId = query.lastInsertId().toInt();
+        }
+
         return true;
     }
 
     QList<Invoice> getAllInvoices() {
         QList<Invoice> invoices;
-        QSqlQuery query("SELECT * FROM invoices ORDER BY import_date DESC");
+        QSqlQuery query("SELECT i.*, p.name AS project_name_display FROM invoices i LEFT JOIN projects p ON i.project_id = p.id ORDER BY i.import_date DESC");
 
         while (query.next()) {
             Invoice inv;
@@ -396,7 +698,8 @@ public:
             inv.payerTaxId = query.value("payer_tax_id").toString();
             inv.payeeName = query.value("payee_name").toString();
             inv.payeeTaxId = query.value("payee_tax_id").toString();
-            inv.projectName = query.value("project_name").toString();
+            inv.projectId = query.value("project_id").toInt();
+            inv.projectName = query.value("project_name_display").toString();
             inv.invoiceProjectName = query.value("invoice_project_name").toString();
             inv.amount = query.value("amount").toDouble();
             QString taxRateStr = query.value("tax_rate").toString();
@@ -415,7 +718,7 @@ public:
     Invoice getInvoiceById(int id) {
         Invoice inv;
         QSqlQuery query;
-        query.prepare("SELECT * FROM invoices WHERE id = :id");
+        query.prepare("SELECT i.*, p.name AS project_name_display FROM invoices i LEFT JOIN projects p ON i.project_id = p.id WHERE i.id = :id");
         query.bindValue(":id", id);
 
         if (query.exec() && query.next()) {
@@ -426,7 +729,8 @@ public:
             inv.payerTaxId = query.value("payer_tax_id").toString();
             inv.payeeName = query.value("payee_name").toString();
             inv.payeeTaxId = query.value("payee_tax_id").toString();
-            inv.projectName = query.value("project_name").toString();
+            inv.projectId = query.value("project_id").toInt();
+            inv.projectName = query.value("project_name_display").toString();
             inv.invoiceProjectName = query.value("invoice_project_name").toString();
             inv.amount = query.value("amount").toDouble();
             QString taxRateStr = query.value("tax_rate").toString();
@@ -441,46 +745,171 @@ public:
         return inv;
     }
 
-    bool updateInvoice(const Invoice& invoice) {
+    // Validate invoice before save
+    struct ValidationResult {
+        bool success;
+        QString errorMessage;
+    };
+
+    ValidationResult validateInvoice(const Invoice& invoice, int excludeId = -1) {
+        // Check invoice number is not empty
+        if (invoice.invoiceNumber.trimmed().isEmpty()) {
+            return {false, "发票号码不能为空"};
+        }
+
+        // Check invoice number uniqueness (exclude current ID for updates)
+        QSqlQuery query;
+        if (excludeId > 0) {
+            query.prepare("SELECT COUNT(*) FROM invoices WHERE invoice_number = :invoice_number AND id != :id");
+            query.bindValue(":id", excludeId);
+        } else {
+            query.prepare("SELECT COUNT(*) FROM invoices WHERE invoice_number = :invoice_number");
+        }
+        query.bindValue(":invoice_number", invoice.invoiceNumber.trimmed());
+
+        if (query.exec() && query.next()) {
+            if (query.value(0).toInt() > 0) {
+                return {false, "发票号码已存在，请输入唯一的发票号码"};
+            }
+        }
+
+        // Check amount is valid
+        if (invoice.amount < 0) {
+            return {false, "金额不能为负数"};
+        }
+        if (invoice.amount > 999999999.99) {
+            return {false, "金额超出有效范围"};
+        }
+
+        // Check tax rate is valid
+        if (invoice.taxRate < 0 || invoice.taxRate > 100) {
+            return {false, "税率必须在 0% - 100% 之间"};
+        }
+
+        return {true, ""};
+    }
+
+    bool updateInvoiceFull(const Invoice& invoice, QString* errorMsg = nullptr) {
+        // Validate first
+        auto validation = validateInvoice(invoice, invoice.id);
+        if (!validation.success) {
+            if (errorMsg) *errorMsg = validation.errorMessage;
+            return false;
+        }
+
         QSqlQuery query;
         query.prepare(R"(
             UPDATE invoices SET
                 invoice_number = :invoice_number,
+                invoice_date = :invoice_date,
                 payer_name = :payer_name,
+                payer_tax_id = :payer_tax_id,
                 payee_name = :payee_name,
-                project_name = :project_name,
+                payee_tax_id = :payee_tax_id,
+                project_id = :project_id,
+                invoice_project_name = :invoice_project_name,
                 amount = :amount,
+                tax_rate = :tax_rate,
+                tax_amount = :tax_amount,
                 status = :status
             WHERE id = :id
         )");
 
         query.bindValue(":id", invoice.id);
-        query.bindValue(":invoice_number", invoice.invoiceNumber);
+        query.bindValue(":invoice_number", invoice.invoiceNumber.trimmed());
+        query.bindValue(":invoice_date", invoice.invoiceDate);
         query.bindValue(":payer_name", invoice.payerName);
+        query.bindValue(":payer_tax_id", invoice.payerTaxId);
         query.bindValue(":payee_name", invoice.payeeName);
-        query.bindValue(":project_name", invoice.projectName);
+        query.bindValue(":payee_tax_id", invoice.payeeTaxId);
+        query.bindValue(":project_id", invoice.projectId > 0 ? invoice.projectId : QVariant());
+        query.bindValue(":invoice_project_name", invoice.invoiceProjectName);
         query.bindValue(":amount", invoice.amount);
+        query.bindValue(":tax_rate", QString("%1%").arg(invoice.taxRate));
+        query.bindValue(":tax_amount", invoice.taxAmount);
         query.bindValue(":status", invoice.status);
 
         if (!query.exec()) {
-            qDebug() << "Failed to update invoice:" << query.lastError().text();
+            QString err = QString("数据库更新失败: %1").arg(query.lastError().text());
+            qDebug() << err;
+            if (errorMsg) *errorMsg = err;
             return false;
         }
 
         return true;
     }
 
-    bool deleteInvoice(int id) {
-        QSqlQuery query;
-        query.prepare("DELETE FROM invoices WHERE id = :id");
-        query.bindValue(":id", id);
+    bool updateInvoice(const Invoice& invoice) {
+        QString errorMsg;
+        bool result = updateInvoiceFull(invoice, &errorMsg);
+        if (!result) {
+            qDebug() << "Update invoice failed:" << errorMsg;
+        }
+        return result;
+    }
 
-        if (!query.exec()) {
-            qDebug() << "Failed to delete invoice:" << query.lastError().text();
-            return false;
+    // Delete invoice with file consistency strategy
+    // Strategy: If file deletion fails, abort database deletion to avoid inconsistency
+    struct DeleteResult {
+        bool success;
+        QString errorMessage;
+        QString filePath;  // Original file path (for recovery if needed)
+    };
+
+    DeleteResult deleteInvoiceWithConsistency(int id) {
+        // First get the invoice info (for file path and audit log)
+        Invoice inv = getInvoiceById(id);
+        if (inv.id <= 0) {
+            return {false, "发票不存在", ""};
         }
 
-        return true;
+        QString filePath = inv.filePath;
+
+        // Start transaction
+        if (!db.transaction()) {
+            return {false, "无法启动数据库事务", filePath};
+        }
+
+        try {
+            // Step 1: Try to delete file first (if file deletion fails, we abort)
+            if (!filePath.isEmpty() && QFile::exists(filePath)) {
+                if (!QFile::remove(filePath)) {
+                    db.rollback();
+                    return {false, "无法删除发票文件，请检查文件权限", filePath};
+                }
+            }
+
+            // Step 2: Delete from database
+            QSqlQuery query;
+            query.prepare("DELETE FROM invoices WHERE id = :id");
+            query.bindValue(":id", id);
+
+            if (!query.exec()) {
+                db.rollback();
+                return {false, QString("数据库删除失败: %1").arg(query.lastError().text()), filePath};
+            }
+
+            // Step 3: Log audit (inside transaction)
+            logAudit("invoice", id, "delete", "", "", "success", "Invoice deleted");
+
+            // Commit transaction
+            if (!db.commit()) {
+                db.rollback();
+                return {false, "事务提交失败", filePath};
+            }
+
+            return {true, "", filePath};
+
+        } catch (...) {
+            db.rollback();
+            return {false, "删除过程中发生未知错误", filePath};
+        }
+    }
+
+    // Legacy delete method (kept for compatibility, but prefer deleteInvoiceWithConsistency)
+    bool deleteInvoice(int id) {
+        auto result = deleteInvoiceWithConsistency(id);
+        return result.success;
     }
 
     bool invoiceExists(const QString& invoiceNumber) {
@@ -498,7 +927,7 @@ public:
     Invoice getInvoiceByInvoiceNumber(const QString& invoiceNumber) {
         Invoice inv;
         QSqlQuery query;
-        query.prepare("SELECT * FROM invoices WHERE invoice_number = :invoice_number");
+        query.prepare("SELECT i.*, p.name AS project_name_display FROM invoices i LEFT JOIN projects p ON i.project_id = p.id WHERE i.invoice_number = :invoice_number");
         query.bindValue(":invoice_number", invoiceNumber);
 
         if (query.exec() && query.next()) {
@@ -509,7 +938,8 @@ public:
             inv.payerTaxId = query.value("payer_tax_id").toString();
             inv.payeeName = query.value("payee_name").toString();
             inv.payeeTaxId = query.value("payee_tax_id").toString();
-            inv.projectName = query.value("project_name").toString();
+            inv.projectId = query.value("project_id").toInt();
+            inv.projectName = query.value("project_name_display").toString();
             inv.invoiceProjectName = query.value("invoice_project_name").toString();
             inv.amount = query.value("amount").toDouble();
             QString taxRateStr = query.value("tax_rate").toString();
@@ -524,12 +954,12 @@ public:
         return inv;
     }
 
-    // 按项目名称获取发票列表
-    QList<Invoice> getInvoicesByProjectName(const QString& projectName) {
+    // 按项目ID获取发票列表
+    QList<Invoice> getInvoicesByProjectId(int projectId) {
         QList<Invoice> invoices;
         QSqlQuery query;
-        query.prepare("SELECT * FROM invoices WHERE project_name = :project_name ORDER BY import_date DESC");
-        query.bindValue(":project_name", projectName);
+        query.prepare("SELECT i.*, p.name AS project_name_display FROM invoices i LEFT JOIN projects p ON i.project_id = p.id WHERE i.project_id = :project_id ORDER BY i.import_date DESC");
+        query.bindValue(":project_id", projectId);
 
         if (query.exec()) {
             while (query.next()) {
@@ -541,7 +971,8 @@ public:
                 inv.payerTaxId = query.value("payer_tax_id").toString();
                 inv.payeeName = query.value("payee_name").toString();
                 inv.payeeTaxId = query.value("payee_tax_id").toString();
-                inv.projectName = query.value("project_name").toString();
+                inv.projectId = query.value("project_id").toInt();
+                inv.projectName = query.value("project_name_display").toString();
                 inv.invoiceProjectName = query.value("invoice_project_name").toString();
                 inv.amount = query.value("amount").toDouble();
                 QString taxRateStr = query.value("tax_rate").toString();
@@ -558,13 +989,24 @@ public:
         return invoices;
     }
 
-    // 更新发票的项目分配
-    bool assignInvoiceToProject(int invoiceId, const QString& projectName) {
+    // 更新发票的项目分配（使用项目ID）
+    bool assignInvoiceToProject(int invoiceId, int projectId) {
         QSqlQuery query;
-        query.prepare("UPDATE invoices SET project_name = :project_name WHERE id = :id");
-        query.bindValue(":project_name", projectName);
+        query.prepare("UPDATE invoices SET project_id = :project_id WHERE id = :id");
+        query.bindValue(":project_id", projectId > 0 ? projectId : QVariant());
         query.bindValue(":id", invoiceId);
         return query.exec();
+    }
+
+    // 获取项目ID通过名称
+    int getProjectIdByName(const QString& projectName) {
+        QSqlQuery query;
+        query.prepare("SELECT id FROM projects WHERE name = :name");
+        query.bindValue(":name", projectName);
+        if (query.exec() && query.next()) {
+            return query.value(0).toInt();
+        }
+        return -1;
     }
 
 private:
@@ -1586,6 +2028,115 @@ private:
     }
 };
 
+// Async PDF Processing Worker
+class AsyncPdfProcessor : public QObject {
+    Q_OBJECT
+public:
+    struct ProcessingResult {
+        bool success;
+        struct ExtractedFields {
+            QString invoiceNumber;
+            QString invoiceDate;
+            QString payerName;
+            QString payerTaxId;
+            QString payeeName;
+            QString payeeTaxId;
+            QString projectName;
+            double amount;
+            double taxRate;
+            double taxAmount;
+            bool success;
+            QString rawText;
+        } fields;
+        QString errorMessage;
+        QString filePath;
+    };
+
+    AsyncPdfProcessor(QObject* parent = nullptr) : QObject(parent) {}
+
+    // Process PDF extraction in background thread
+    QFuture<ProcessingResult> processPdfAsync(const QString& filePath) {
+        return QtConcurrent::run([this, filePath]() -> ProcessingResult {
+            return processPdf(filePath);
+        });
+    }
+
+    // Generate preview image in background thread
+    QFuture<QPixmap> generatePreviewAsync(const QString& filePath, int maxWidth, int maxHeight) {
+        return QtConcurrent::run([filePath, maxWidth, maxHeight]() -> QPixmap {
+            return generatePreview(filePath, maxWidth, maxHeight);
+        });
+    }
+
+private:
+    ProcessingResult processPdf(const QString& filePath) {
+        ProcessingResult result;
+        result.filePath = filePath;
+
+        QFileInfo fileInfo(filePath);
+        QString extension = fileInfo.suffix().toLower();
+
+        if (extension == "pdf") {
+            PdfTextExtractor extractor;
+            PdfTextExtractor::ExtractedFields extracted = extractor.extractInvoiceData(filePath);
+            // Copy fields
+            result.fields.invoiceNumber = extracted.invoiceNumber;
+            result.fields.invoiceDate = extracted.invoiceDate;
+            result.fields.payerName = extracted.payerName;
+            result.fields.payerTaxId = extracted.payerTaxId;
+            result.fields.payeeName = extracted.payeeName;
+            result.fields.payeeTaxId = extracted.payeeTaxId;
+            result.fields.projectName = extracted.projectName;
+            result.fields.amount = extracted.amount;
+            result.fields.taxRate = extracted.taxRate;
+            result.fields.taxAmount = extracted.taxAmount;
+            result.fields.success = extracted.success;
+            result.fields.rawText = extracted.rawText;
+            result.success = extracted.success;
+            if (!result.success) {
+                result.errorMessage = "无法自动识别PDF内容";
+            }
+        } else {
+            result.success = false;
+            result.errorMessage = "不支持的文件格式";
+        }
+
+        return result;
+    }
+
+    static QPixmap generatePreview(const QString& filePath, int maxWidth, int maxHeight) {
+        QString tempImageBase = QDir::tempPath() + "/invoice_preview_" + QString::number(QDateTime::currentMSecsSinceEpoch());
+        QString tempImage = tempImageBase + ".png";
+
+        QProcess process;
+        QStringList args;
+        args << "-png" << "-f" << "1" << "-l" << "1" << "-singlefile" << filePath << tempImageBase;
+        process.start("pdftoppm", args);
+
+        if (!process.waitForFinished(15000)) {
+            return QPixmap();
+        }
+
+        if (process.exitCode() != 0 || !QFile::exists(tempImage)) {
+            return QPixmap();
+        }
+
+        QPixmap pixmap(tempImage);
+        QFile::remove(tempImage);
+
+        if (pixmap.isNull()) {
+            return QPixmap();
+        }
+
+        // Scale to fit
+        if (pixmap.width() > maxWidth || pixmap.height() > maxHeight) {
+            pixmap = pixmap.scaled(maxWidth, maxHeight, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+        }
+
+        return pixmap;
+    }
+};
+
 // Manual entry dialog for when extraction fails
 class ManualEntryDialog : public QDialog {
     Q_OBJECT
@@ -1640,10 +2191,20 @@ class InvoiceManagerWindow : public QMainWindow {
     Q_OBJECT
 
 public:
-    InvoiceManagerWindow(QWidget* parent = nullptr) : QMainWindow(parent) {
+    InvoiceManagerWindow(QWidget* parent = nullptr) : QMainWindow(parent),
+        pdfProcessor(new AsyncPdfProcessor(this)),
+        importWatcher(new QFutureWatcher<AsyncPdfProcessor::ProcessingResult>(this)),
+        previewWatcher(new QFutureWatcher<QPixmap>(this)),
+        progressDialog(nullptr) {
         setupUI();
         refreshInvoiceList();
         refreshProjectsList();
+
+        // Connect async watchers
+        connect(importWatcher, &QFutureWatcher<AsyncPdfProcessor::ProcessingResult>::finished,
+                this, &InvoiceManagerWindow::onImportCompleted);
+        connect(previewWatcher, &QFutureWatcher<QPixmap>::finished,
+                this, &InvoiceManagerWindow::onPreviewCompleted);
     }
 
 private slots:
@@ -1695,77 +2256,18 @@ private slots:
 
         qDebug() << "File copied to:" << destPath;
 
-        // Extract data from PDF
-        PdfTextExtractor::ExtractedFields fields;
+        // Store for async processing
+        pendingImportFilePath = destPath;
 
-        if (extension == "pdf") {
-            PdfTextExtractor extractor;
-            fields = extractor.extractInvoiceData(destPath);
-        }
+        // Show progress dialog
+        progressDialog = new QProgressDialog("正在解析发票文件...", "取消", 0, 0, this);
+        progressDialog->setWindowModality(Qt::WindowModal);
+        progressDialog->setCancelButton(nullptr);
+        progressDialog->show();
 
-        // If extraction failed, show manual entry dialog
-        if (!fields.success || fields.invoiceNumber.isEmpty()) {
-            QMessageBox::information(this, "自动识别失败", "无法自动识别发票信息，请手动输入。");
-
-            ManualEntryDialog dialog(this);
-            if (dialog.exec() != QDialog::Accepted) {
-                // User cancelled, remove copied file
-                QFile::remove(destPath);
-                return;
-            }
-
-            fields.invoiceNumber = dialog.invoiceNumber();
-            fields.payerName = dialog.payerName();
-            fields.payeeName = dialog.payeeName();
-            fields.projectName = dialog.projectName();
-            fields.amount = dialog.amount();
-            fields.success = true;
-        }
-
-        // Check if invoice already exists
-        if (db.invoiceExists(fields.invoiceNumber)) {
-            Invoice existing = db.getInvoiceByInvoiceNumber(fields.invoiceNumber);
-            QString msg = QString("发票号码 %1 已经存在于系统中，无法重复导入。\n\n"
-                                  "已存在发票信息：\n"
-                                  "- 付款方：%2\n"
-                                  "- 收款方：%3\n"
-                                  "- 金额：¥%4\n"
-                                  "- 导入时间：%5")
-                                  .arg(fields.invoiceNumber)
-                                  .arg(existing.payerName)
-                                  .arg(existing.payeeName)
-                                  .arg(existing.amount, 0, 'f', 2)
-                                  .arg(existing.importDate.toString("yyyy-MM-dd hh:mm"));
-            QMessageBox::warning(this, "发票已存在", msg);
-            QFile::remove(destPath);
-            return;
-        }
-
-        // Create invoice record
-        Invoice invoice;
-        invoice.invoiceNumber = fields.invoiceNumber;
-        invoice.invoiceDate = fields.invoiceDate;
-        invoice.payerName = fields.payerName;
-        invoice.payerTaxId = fields.payerTaxId;
-        invoice.payeeName = fields.payeeName;
-        invoice.payeeTaxId = fields.payeeTaxId;
-        // 如果有选中的报销项目，则使用该项目名称；否则为空（未分配项目）
-        invoice.projectName = selectedProjectFilter;
-        invoice.invoiceProjectName = fields.projectName;  // 保存发票上的项目名称
-        invoice.amount = fields.amount;
-        invoice.taxRate = fields.taxRate;
-        invoice.taxAmount = fields.taxAmount;
-        invoice.filePath = destPath;
-        invoice.status = "draft";
-
-        // Save to database
-        if (db.addInvoice(invoice)) {
-            QMessageBox::information(this, "导入成功", "发票已成功导入系统。");
-            refreshInvoiceList();
-        } else {
-            QMessageBox::critical(this, "导入失败", "保存发票信息到数据库失败。");
-            QFile::remove(destPath);
-        }
+        // Start async PDF processing
+        QFuture<AsyncPdfProcessor::ProcessingResult> future = pdfProcessor->processPdfAsync(destPath);
+        importWatcher->setFuture(future);
     }
 
     void onInvoiceItemClicked(int invoiceId) {
@@ -1990,7 +2492,7 @@ private:
         return detailWidget;
     }
 
-    void refreshInvoiceList(const QString& filterProject = QString()) {
+    void refreshInvoiceList(int filterProjectId = -1) {
         // Clear existing items
         QLayoutItem* child;
         while ((child = listContentLayout->takeAt(0)) != nullptr) {
@@ -2001,14 +2503,14 @@ private:
         }
 
         QList<Invoice> invoices;
-        if (filterProject.isEmpty()) {
+        if (filterProjectId < 0) {
             invoices = db.getAllInvoices();
         } else {
-            invoices = db.getInvoicesByProjectName(filterProject);
+            invoices = db.getInvoicesByProjectId(filterProjectId);
         }
 
         if (invoices.isEmpty()) {
-            QString emptyText = filterProject.isEmpty()
+            QString emptyText = (filterProjectId < 0)
                 ? "暂无发票\n点击右上角导入按钮添加"
                 : "该项目暂无发票\n请分配发票到该项目";
             QLabel* emptyLabel = new QLabel(emptyText);
@@ -2159,53 +2661,30 @@ private:
         pdfPreviewLabel->setAlignment(Qt::AlignCenter);
         pdfPreviewLabel->setStyleSheet("background-color: #F6F6F6; border: none;");
 
-        // Try to generate PDF preview
-        if (!invoice.filePath.isEmpty() && QFile::exists(invoice.filePath)) {
-            // Use pdftoppm to convert first page to image
-            QString tempImageBase = QDir::tempPath() + "/invoice_preview_" + QString::number(invoice.id);
-            QString tempImage = tempImageBase + ".png";
+        // Store current invoice ID for preview callback
+        int currentId = invoice.id;
+        QString currentFilePath = invoice.filePath;
 
-            // Remove existing temp file if any
-            QFile::remove(tempImage);
+        // Try to generate PDF preview asynchronously
+        if (!currentFilePath.isEmpty() && QFile::exists(currentFilePath)) {
+            // Show loading text
+            pdfPreviewLabel->setText("正在生成预览...");
 
-            QProcess process;
-            QStringList args;
-            args << "-png" << "-f" << "1" << "-l" << "1" << "-singlefile" << invoice.filePath << tempImageBase;
-            process.start("pdftoppm", args);
+            // Calculate preview size
+            int maxWidth = detailScrollArea->width() - 100;
+            if (maxWidth < 400) maxWidth = 400;
+            int windowHeight = this->height();
+            int dynamicMaxWidth = (windowHeight - 250) * 3 / 4;
+            if (dynamicMaxWidth < 400) dynamicMaxWidth = 400;
+            if (dynamicMaxWidth > 600) dynamicMaxWidth = 600;
+            if (maxWidth > dynamicMaxWidth) maxWidth = dynamicMaxWidth;
+            int maxHeight = 800;
 
-            bool success = process.waitForFinished(15000);
-            int exitCode = process.exitCode();
-
-            if (success && exitCode == 0 && QFile::exists(tempImage)) {
-                QPixmap pixmap(tempImage);
-                if (!pixmap.isNull()) {
-                    // Scale to fit width while maintaining aspect ratio
-                    int maxWidth = detailScrollArea->width() - 100;
-                    if (maxWidth < 400) maxWidth = 400;
-                    // Dynamic max width based on window height to prevent overflow
-                    int windowHeight = this->height();
-                    int dynamicMaxWidth = (windowHeight - 250) * 3 / 4; // Assume A4 ratio (3:4)
-                    if (dynamicMaxWidth < 400) dynamicMaxWidth = 400;
-                    if (dynamicMaxWidth > 600) dynamicMaxWidth = 600;
-                    if (maxWidth > dynamicMaxWidth) maxWidth = dynamicMaxWidth;
-                    if (pixmap.width() > maxWidth) {
-                        pixmap = pixmap.scaledToWidth(maxWidth, Qt::SmoothTransformation);
-                    }
-                    pdfPreviewLabel->setPixmap(pixmap);
-                } else {
-                    pdfPreviewLabel->setText("无法加载 PDF 预览图像");
-                }
-                // Clean up temp file
-                QFile::remove(tempImage);
-            } else {
-                QString errorMsg = QString("PDF 预览生成失败 (exit: %1)\n%2")
-                    .arg(exitCode)
-                    .arg(QString::fromUtf8(process.readAllStandardError()));
-                pdfPreviewLabel->setText(errorMsg);
-                qDebug() << "pdftoppm failed:" << errorMsg;
-            }
+            // Start async preview generation
+            QFuture<QPixmap> future = pdfProcessor->generatePreviewAsync(currentFilePath, maxWidth, maxHeight);
+            previewWatcher->setFuture(future);
         } else {
-            pdfPreviewLabel->setText("PDF 文件不存在: " + invoice.filePath);
+            pdfPreviewLabel->setText("PDF 文件不存在: " + currentFilePath);
         }
 
         pdfLayout->addWidget(pdfPreviewLabel);
@@ -2581,7 +3060,8 @@ private:
     int editingProjectId = -1;               // 当前正在编辑的项目ID（-1表示新增）
 
     // Project filtering
-    QString selectedProjectFilter;  // 当前筛选的项目名称，空表示显示全部
+    int selectedProjectId = -1;  // 当前筛选的项目ID，-1表示显示全部
+    QString selectedProjectName;  // 当前筛选的项目名称（用于显示）
     QPointer<QPushButton> selectedProjectButton;  // 当前高亮的项目按钮
 
     // Editable fields for invoice metadata
@@ -2597,6 +3077,13 @@ private:
     QDoubleSpinBox* editTaxAmount;
     QLabel* pdfPreviewLabel;
 
+    // Async processing
+    AsyncPdfProcessor* pdfProcessor;
+    QFutureWatcher<AsyncPdfProcessor::ProcessingResult>* importWatcher;
+    QFutureWatcher<QPixmap>* previewWatcher;
+    QString pendingImportFilePath;
+    QProgressDialog* progressDialog;
+
 private slots:
     void onSaveInvoiceChanges();
 
@@ -2611,8 +3098,12 @@ private slots:
     // ========== 发票项目分配相关槽函数 ==========
     void onInvoiceContextMenuRequested(int invoiceId, const QPoint& globalPos);
     void onAssignProjectToInvoice(int invoiceId);
-    void onProjectButtonClicked(const QString& projectName, QPushButton* btn);
+    void onProjectButtonClicked(int projectId, const QString& projectName, QPushButton* btn);
     void onDeleteInvoice(int invoiceId);
+
+    // ========== 异步处理槽函数 ==========
+    void onImportCompleted();
+    void onPreviewCompleted();
 };
 
 // ========== InvoiceManagerWindow 方法实现 ==========
@@ -2622,6 +3113,13 @@ void InvoiceManagerWindow::onSaveInvoiceChanges() {
 
     Invoice invoice = db.getInvoiceById(currentInvoiceId);
     if (invoice.id <= 0) return;
+
+    // Store original data for audit log
+    QString beforeJson = QString("{\"invoice_number\":\"%1\",\"payer_name\":\"%2\",\"payee_name\":\"%3\",\"amount\":%4}")
+                         .arg(invoice.invoiceNumber)
+                         .arg(invoice.payerName)
+                         .arg(invoice.payeeName)
+                         .arg(invoice.amount);
 
     // Update fields from edit controls
     invoice.invoiceNumber = editInvoiceNumber->text();
@@ -2635,32 +3133,24 @@ void InvoiceManagerWindow::onSaveInvoiceChanges() {
     invoice.taxRate = editTaxRate->value();
     invoice.taxAmount = editTaxAmount->value();
 
-    // Save to database
-    QSqlQuery query;
-    query.prepare("UPDATE invoices SET invoice_number = :invoice_number, invoice_date = :invoice_date, "
-                  "payer_name = :payer_name, payer_tax_id = :payer_tax_id, "
-                  "payee_name = :payee_name, payee_tax_id = :payee_tax_id, "
-                  "invoice_project_name = :invoice_project_name, amount = :amount, "
-                  "tax_rate = :tax_rate, tax_amount = :tax_amount "
-                  "WHERE id = :id");
-    query.bindValue(":invoice_number", invoice.invoiceNumber);
-    query.bindValue(":invoice_date", invoice.invoiceDate);
-    query.bindValue(":payer_name", invoice.payerName);
-    query.bindValue(":payer_tax_id", invoice.payerTaxId);
-    query.bindValue(":payee_name", invoice.payeeName);
-    query.bindValue(":payee_tax_id", invoice.payeeTaxId);
-    query.bindValue(":invoice_project_name", invoice.invoiceProjectName);
-    query.bindValue(":amount", invoice.amount);
-    query.bindValue(":tax_rate", QString("%1%").arg(invoice.taxRate));
-    query.bindValue(":tax_amount", invoice.taxAmount);
-    query.bindValue(":id", invoice.id);
+    // Use data layer to save with validation
+    QString errorMsg;
+    if (db.updateInvoiceFull(invoice, &errorMsg)) {
+        // Log audit
+        QString afterJson = QString("{\"invoice_number\":\"%1\",\"payer_name\":\"%2\",\"payee_name\":\"%3\",\"amount\":%4}")
+                          .arg(invoice.invoiceNumber)
+                          .arg(invoice.payerName)
+                          .arg(invoice.payeeName)
+                          .arg(invoice.amount);
+        db.logAudit("invoice", invoice.id, "update", beforeJson, afterJson, "success", "");
 
-    if (query.exec()) {
         QMessageBox::information(this, "保存成功", "发票信息已更新。");
-        refreshInvoiceList();
+        refreshInvoiceList(selectedProjectId);
         updateDetailView(invoice);
     } else {
-        QMessageBox::warning(this, "保存失败", "无法保存修改：" + query.lastError().text());
+        // Log audit for failure
+        db.logAudit("invoice", invoice.id, "update", beforeJson, "", "fail", errorMsg);
+        QMessageBox::warning(this, "保存失败", errorMsg);
     }
 }
 
@@ -2938,8 +3428,8 @@ void InvoiceManagerWindow::refreshProjectsList() {
         });
 
         // 设置左键点击处理
-        connect(btn, &QPushButton::clicked, [this, projectName, btn]() {
-            onProjectButtonClicked(projectName, btn);
+        connect(btn, &QPushButton::clicked, [this, projectId, projectName, btn]() {
+            onProjectButtonClicked(projectId, projectName, btn);
         });
 
         // 在 stretch 之前插入
@@ -3014,10 +3504,10 @@ void InvoiceManagerWindow::onAssignProjectToInvoice(int invoiceId) {
     // 弹出项目选择对话框
     ProjectSelectionDialog dialog(projects, this);
     if (dialog.exec() == QDialog::Accepted) {
-        QString selectedProject = dialog.selectedProjectName();
-        if (!selectedProject.isEmpty()) {
-            if (db.assignInvoiceToProject(invoiceId, selectedProject)) {
-                refreshInvoiceList(selectedProjectFilter);  // 保持当前筛选
+        int selectedProjectId = dialog.selectedProjectId();
+        if (selectedProjectId > 0) {
+            if (db.assignInvoiceToProject(invoiceId, selectedProjectId)) {
+                refreshInvoiceList(selectedProjectId);  // 保持当前筛选
                 // 如果当前选中的是这个发票，更新详情页
                 if (currentInvoiceId == invoiceId) {
                     Invoice inv = db.getInvoiceById(invoiceId);
@@ -3030,7 +3520,7 @@ void InvoiceManagerWindow::onAssignProjectToInvoice(int invoiceId) {
     }
 }
 
-void InvoiceManagerWindow::onProjectButtonClicked(const QString& projectName, QPushButton* btn) {
+void InvoiceManagerWindow::onProjectButtonClicked(int projectId, const QString& projectName, QPushButton* btn) {
     // 正常按钮样式
     QString normalStyle =
         "QPushButton {"
@@ -3061,24 +3551,26 @@ void InvoiceManagerWindow::onProjectButtonClicked(const QString& projectName, QP
         "}";
 
     // 如果点击的是已选中的项目，则取消筛选
-    if (selectedProjectFilter == projectName) {
-        selectedProjectFilter.clear();
+    if (selectedProjectId == projectId) {
+        selectedProjectId = -1;
+        selectedProjectName.clear();
         // 恢复按钮样式
         if (selectedProjectButton) {
             selectedProjectButton->setStyleSheet(normalStyle);
         }
         selectedProjectButton = nullptr;
-        refreshInvoiceList(QString());  // 显示全部
+        refreshInvoiceList(-1);  // 显示全部
     } else {
         // 取消之前选中的按钮高亮
         if (selectedProjectButton) {
             selectedProjectButton->setStyleSheet(normalStyle);
         }
         // 高亮当前按钮
-        selectedProjectFilter = projectName;
+        selectedProjectId = projectId;
+        selectedProjectName = projectName;
         selectedProjectButton = btn;
         btn->setStyleSheet(highlightedStyle);
-        refreshInvoiceList(projectName);  // 筛选显示
+        refreshInvoiceList(projectId);  // 筛选显示
     }
 }
 
@@ -3113,17 +3605,10 @@ void InvoiceManagerWindow::onDeleteInvoice(int invoiceId) {
         return;
     }
 
-    // 删除原始文件
-    QString filePath = invoice.filePath;
-    if (!filePath.isEmpty() && QFile::exists(filePath)) {
-        if (!QFile::remove(filePath)) {
-            qDebug() << "Failed to delete file:" << filePath;
-            // 继续删除数据库记录，即使文件删除失败
-        }
-    }
+    // 使用一致性删除策略
+    auto result = db.deleteInvoiceWithConsistency(invoiceId);
 
-    // 删除数据库记录
-    if (db.deleteInvoice(invoiceId)) {
+    if (result.success) {
         // 如果删除的是当前选中的发票，清空详情页
         if (currentInvoiceId == invoiceId) {
             currentInvoiceId = -1;
@@ -3145,11 +3630,123 @@ void InvoiceManagerWindow::onDeleteInvoice(int invoiceId) {
         }
 
         // 刷新发票列表
-        refreshInvoiceList(selectedProjectFilter);
+        refreshInvoiceList(selectedProjectId);
 
         QMessageBox::information(this, "删除成功", "发票已成功删除。");
     } else {
-        QMessageBox::critical(this, "删除失败", "无法删除发票，请重试。");
+        QMessageBox::critical(this, "删除失败", result.errorMessage);
+    }
+}
+
+void InvoiceManagerWindow::onPreviewCompleted() {
+    QPixmap pixmap = previewWatcher->result();
+
+    if (!pixmap.isNull() && pdfPreviewLabel) {
+        pdfPreviewLabel->setPixmap(pixmap);
+    } else if (pdfPreviewLabel) {
+        pdfPreviewLabel->setText("无法加载 PDF 预览图像");
+    }
+}
+
+void InvoiceManagerWindow::onImportCompleted() {
+    // Hide and clean up progress dialog
+    if (progressDialog) {
+        progressDialog->hide();
+        progressDialog->deleteLater();
+        progressDialog = nullptr;
+    }
+
+    AsyncPdfProcessor::ProcessingResult result = importWatcher->result();
+    AsyncPdfProcessor::ProcessingResult::ExtractedFields fields = result.fields;
+
+    if (!result.success) {
+        // Extraction failed, show manual entry dialog
+        QMessageBox::information(this, "自动识别失败", "无法自动识别发票信息，请手动输入。");
+
+        ManualEntryDialog dialog(this);
+        if (dialog.exec() != QDialog::Accepted) {
+            // User cancelled, remove copied file
+            QFile::remove(pendingImportFilePath);
+            return;
+        }
+
+        fields.invoiceNumber = dialog.invoiceNumber();
+        fields.payerName = dialog.payerName();
+        fields.payeeName = dialog.payeeName();
+        fields.projectName = dialog.projectName();
+        fields.amount = dialog.amount();
+        fields.success = true;
+    }
+
+    // Check if invoice already exists
+    if (db.invoiceExists(fields.invoiceNumber)) {
+        Invoice existing = db.getInvoiceByInvoiceNumber(fields.invoiceNumber);
+        QString msg = QString("发票号码 %1 已经存在于系统中，无法重复导入。\n\n"
+                              "已存在发票信息：\n"
+                              "- 付款方：%2\n"
+                              "- 收款方：%3\n"
+                              "- 金额：¥%4\n"
+                              "- 导入时间：%5")
+                              .arg(fields.invoiceNumber)
+                              .arg(existing.payerName)
+                              .arg(existing.payeeName)
+                              .arg(existing.amount, 0, 'f', 2)
+                              .arg(existing.importDate.toString("yyyy-MM-dd hh:mm"));
+        QMessageBox::warning(this, "发票已存在", msg);
+        QFile::remove(pendingImportFilePath);
+        return;
+    }
+
+    // Create invoice record
+    Invoice invoice;
+    invoice.invoiceNumber = fields.invoiceNumber;
+    invoice.invoiceDate = fields.invoiceDate;
+    invoice.payerName = fields.payerName;
+    invoice.payerTaxId = fields.payerTaxId;
+    invoice.payeeName = fields.payeeName;
+    invoice.payeeTaxId = fields.payeeTaxId;
+    // 初始未分配项目（projectId = -1）
+    invoice.projectId = -1;
+    invoice.invoiceProjectName = fields.projectName;  // 保存发票上的项目名称
+    invoice.amount = fields.amount;
+    invoice.taxRate = fields.taxRate;
+    invoice.taxAmount = fields.taxAmount;
+    invoice.filePath = pendingImportFilePath;
+    invoice.status = "draft";
+
+    // Save to database and get new ID
+    int newInvoiceId = -1;
+    if (db.addInvoice(invoice, &newInvoiceId)) {
+        // Log audit
+        db.logAudit("invoice", newInvoiceId, "import", "", "", "success", "PDF imported successfully");
+
+        // Ask user if they want to assign to a project
+        QList<QPair<int, QString>> projects = db.getAllProjects();
+        if (!projects.isEmpty()) {
+            QMessageBox::StandardButton reply = QMessageBox::question(this, "导入成功",
+                "发票已成功导入系统。\n\n是否要将此发票分配到报销项目？",
+                QMessageBox::Yes | QMessageBox::No,
+                QMessageBox::No);
+
+            if (reply == QMessageBox::Yes) {
+                ProjectSelectionDialog dialog(projects, this);
+                if (dialog.exec() == QDialog::Accepted) {
+                    int selectedProjectId = dialog.selectedProjectId();
+                    if (selectedProjectId > 0) {
+                        if (db.assignInvoiceToProject(newInvoiceId, selectedProjectId)) {
+                            db.logAudit("invoice", newInvoiceId, "assign_project", "", QString::number(selectedProjectId), "success", "");
+                        }
+                    }
+                }
+            }
+        } else {
+            QMessageBox::information(this, "导入成功", "发票已成功导入系统。");
+        }
+
+        refreshInvoiceList(selectedProjectId);
+    } else {
+        QMessageBox::critical(this, "导入失败", "保存发票信息到数据库失败。");
+        QFile::remove(pendingImportFilePath);
     }
 }
 

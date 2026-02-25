@@ -1,0 +1,2 @@
+set(__QT_DEPLOY_TARGET_invoice_manager_FILE /Users/hongyinzhang/project/invoice_app_datalist/src/invoice_manager.app/Contents/MacOS/invoice_manager)
+set(__QT_DEPLOY_TARGET_invoice_manager_TYPE EXECUTABLE)

@@ -1,0 +1,5 @@
+/Users/hongyinzhang/project/invoice_app_datalist/src/CMakeFiles/invoice_manager.dir
+/Users/hongyinzhang/project/invoice_app_datalist/src/CMakeFiles/edit_cache.dir
+/Users/hongyinzhang/project/invoice_app_datalist/src/CMakeFiles/rebuild_cache.dir
+/Users/hongyinzhang/project/invoice_app_datalist/src/CMakeFiles/invoice_manager_autogen_timestamp_deps.dir
+/Users/hongyinzhang/project/invoice_app_datalist/src/CMakeFiles/invoice_manager_autogen.dir
