@@ -1,7 +1,7 @@
 ---
 description: 发票识别规则全自动优化专家 - 分析PDF提取结果并自动修复识别逻辑
 mode: subagent
-model: kimi/k2.5
+model: kimi-for-coding/k2p5
 temperature: 0.2
 tools:
   read: true

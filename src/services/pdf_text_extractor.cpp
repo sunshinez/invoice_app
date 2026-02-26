@@ -814,24 +814,43 @@ double PdfTextExtractor::extractTaxRatePosition(QList<TextPosition>& positions) 
 }
 
 double PdfTextExtractor::extractTaxAmountPosition(QList<TextPosition>& positions) {
+    // Strategy 1: Find "税额" or "税" column header
     TextPosition* taxLabel = nullptr;
+    bool foundSingleChar = false;
 
     for (auto& pos : positions) {
         QString noSpaceText = pos.text;
         noSpaceText.remove(QRegularExpression("\\s+"));
-        if (noSpaceText == "税额") {
+        // Match "税额" as full text, or "税"/"额" as single column header
+        if (noSpaceText == "税额" || noSpaceText == "税") {
             taxLabel = &pos;
+            foundSingleChar = (noSpaceText == "税");
             break;
+        }
+    }
+
+    // If not found, also try "额" as fallback
+    if (!taxLabel) {
+        for (auto& pos : positions) {
+            QString noSpaceText = pos.text;
+            noSpaceText.remove(QRegularExpression("\\s+"));
+            if (noSpaceText == "额") {
+                taxLabel = &pos;
+                foundSingleChar = true;
+                break;
+            }
         }
     }
 
     if (taxLabel) {
         double headerX = taxLabel->x;
+        // For single char headers, search in a wider x range
+        double xTolerance = foundSingleChar ? 100 : 80;
         TextPosition* bestMatch = nullptr;
         double bestY = std::numeric_limits<double>::max();
 
         for (auto& pos : positions) {
-            if (pos.y > taxLabel->y + 5 && std::abs(pos.x - headerX) < 80) {
+            if (pos.y > taxLabel->y + 5 && std::abs(pos.x - headerX) < xTolerance) {
                 QString text = pos.text.trimmed();
                 QRegularExpression re("^([\\d,]+\\.\\d{2})$");
                 auto match = re.match(text);
@@ -859,11 +878,47 @@ double PdfTextExtractor::extractTaxAmountPosition(QList<TextPosition>& positions
         }
     }
 
+    // Strategy 2: Find "合计" row's tax amount
+    TextPosition* totalLabel = findByText(positions, "合计", Qt::CaseInsensitive);
+    if (totalLabel) {
+        // Look for "¥XX.XX" pattern to the right in the same row
+        auto candidates = findInRegion(positions, totalLabel->x + 200, totalLabel->y - 10,
+                                        totalLabel->x + 500, totalLabel->y + 30);
+        // Find the rightmost amount (usually tax amount is after amount)
+        TextPosition* taxMatch = nullptr;
+        double maxX = 0;
+        for (auto& pos : candidates) {
+            QString text = pos.text.trimmed();
+            QRegularExpression re("¥?\\s*([\\d,]+\\.\\d{2})");
+            auto match = re.match(text);
+            if (match.hasMatch()) {
+                if (pos.x > maxX) {
+                    maxX = pos.x;
+                    taxMatch = &pos;
+                }
+            }
+        }
+        if (taxMatch) {
+            QString text = taxMatch->text.trimmed();
+            QRegularExpression re("¥?\\s*([\\d,]+\\.\\d{2})");
+            auto match = re.match(text);
+            if (match.hasMatch()) {
+                QString amountStr = match.captured(1);
+                amountStr.remove(',');
+                bool ok;
+                double amount = amountStr.toDouble(&ok);
+                if (ok && amount > 0) return amount;
+            }
+        }
+    }
+
+    // Strategy 3: Find amount next to tax rate %
     for (auto& pos : positions) {
         if (pos.text.contains("%")) {
-            TextPosition* taxText = findRightOf(positions, pos, 150, 30);
+            // Try to find tax amount to the right of tax rate
+            TextPosition* taxText = findRightOf(positions, pos, 200, 30);
             if (taxText) {
-                QString text = taxText->text;
+                QString text = taxText->text.trimmed();
                 QRegularExpression re("([\\d,]+\\.\\d{2})");
                 auto match = re.match(text);
                 if (match.hasMatch()) {
@@ -876,6 +931,20 @@ double PdfTextExtractor::extractTaxAmountPosition(QList<TextPosition>& positions
                     }
                 }
             }
+        }
+    }
+
+    // Strategy 4: Calculate from amount and tax rate
+    double amount = extractAmountPosition(positions);
+    double taxRate = extractTaxRatePosition(positions);
+    if (amount > 0 && taxRate > 0) {
+        // Tax = Amount_with_tax - Amount_without_tax
+        // Amount_with_tax = Amount_without_tax * (1 + taxRate/100)
+        // So: Amount_without_tax = Amount_with_tax / (1 + taxRate/100)
+        double amountWithoutTax = amount / (1 + taxRate / 100.0);
+        double calculatedTax = amount - amountWithoutTax;
+        if (calculatedTax > 0) {
+            return std::round(calculatedTax * 100) / 100;  // Round to 2 decimal places
         }
     }
 
