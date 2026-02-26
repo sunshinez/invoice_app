@@ -3,3 +3,7 @@ prompts/
 plans/
 build/
 invoice_manager.app/
+
+# Test directory - exclude contents but keep structure
+# Note: test/src/ source files are tracked, but PDFs and logs are not
+test/
