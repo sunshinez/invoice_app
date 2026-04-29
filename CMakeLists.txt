@@ -26,6 +26,12 @@ add_executable(invoice_manager
     src/ui/manual_entry_dialog.h
     src/ui/invoice_manager_window.cpp
     src/ui/invoice_manager_window.h
+    src/ui/sidebar_widget.cpp
+    src/ui/sidebar_widget.h
+    src/ui/invoice_list_widget.cpp
+    src/ui/invoice_list_widget.h
+    src/ui/invoice_detail_widget.cpp
+    src/ui/invoice_detail_widget.h
 )
 
 target_link_libraries(invoice_manager PRIVATE
