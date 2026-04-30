@@ -8,14 +8,13 @@
 #include <QListWidget>
 #include <QDialogButtonBox>
 #include <QList>
-#include <QPair>
 
 // Project Selection Dialog
 class ProjectSelectionDialog : public QDialog {
     Q_OBJECT
 
 public:
-    ProjectSelectionDialog(const QList<QPair<int, QString>>& projects, QWidget* parent = nullptr);
+    ProjectSelectionDialog(const QList<std::pair<int, QString>>& projects, QWidget* parent = nullptr);
 
     QString selectedProjectName() const;
     int selectedProjectId() const;
@@ -29,7 +28,7 @@ private:
 
     QLineEdit* searchEdit;
     QListWidget* listWidget;
-    QList<QPair<int, QString>> allProjects;
+    QList<std::pair<int, QString>> allProjects;
 };
 
 #endif // PROJECT_SELECTION_DIALOG_H

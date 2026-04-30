@@ -57,9 +57,9 @@ void InvoiceListWidget::refreshInvoiceList(int filterProjectId) {
 
     QList<Invoice> invoices;
     if (filterProjectId < 0) {
-        invoices = db.getAllInvoices();
+        invoices = db.allInvoices();
     } else {
-        invoices = db.getInvoicesByProjectId(filterProjectId);
+        invoices = db.invoicesByProjectId(filterProjectId);
     }
 
     if (invoices.isEmpty()) {
@@ -153,9 +153,6 @@ QWidget* InvoiceListWidget::createInvoiceItemWidget(const Invoice& invoice, bool
     item->installEventFilter(this);
 
     // Store invoice ID
-    connect(item, &QWidget::destroyed, this, [this, item]() {
-        invoiceItemMap.remove(item);
-    });
     invoiceItemMap[item] = invoice.id;
 
     // Right-click context menu
@@ -304,9 +301,9 @@ void InvoiceListWidget::exitSelectionMode() {
 void InvoiceListWidget::onSelectAllInvoices() {
     QList<Invoice> invoices;
     if (currentSelectedProjectIdForExport == -1) {
-        invoices = db.getAllInvoices();
+        invoices = db.allInvoices();
     } else {
-        invoices = db.getInvoicesByProjectId(currentSelectedProjectIdForExport);
+        invoices = db.invoicesByProjectId(currentSelectedProjectIdForExport);
     }
 
     for (const auto& invoice : invoices) {
@@ -379,9 +376,9 @@ void InvoiceListWidget::refreshInvoiceListWithCheckboxes() {
 
     QList<Invoice> invoices;
     if (currentSelectedProjectIdForExport == -1) {
-        invoices = db.getAllInvoices();
+        invoices = db.allInvoices();
     } else {
-        invoices = db.getInvoicesByProjectId(currentSelectedProjectIdForExport);
+        invoices = db.invoicesByProjectId(currentSelectedProjectIdForExport);
     }
 
     for (const auto& invoice : invoices) {
@@ -483,8 +480,8 @@ QWidget* InvoiceListWidget::createInvoiceItemWidgetWithCheckbox(const Invoice& i
     QString projectColor = invoice.projectName.isEmpty() ? "#8E8E93" : "#007AFF";
     QString projectBg = invoice.projectName.isEmpty() ? "#E5E5EA" : "#E8F2FF";
     QLabel* projectLabel = new QLabel(projectDisplayText);
-    int textWidth = projectDisplayText.length() * 7 + 12;
-    int maxWidth = qMin(textWidth, 80);
+    int textWidth = projectDisplayText.size() * 7 + 12;
+    int maxWidth = (std::min)(textWidth, 80);
     projectLabel->setMaximumWidth(maxWidth);
     projectLabel->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
     projectLabel->setWordWrap(false);

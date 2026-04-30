@@ -29,6 +29,7 @@ struct Invoice {
         , amount(0.0)
         , taxRate(0.0)
         , taxAmount(0.0)
+        , status("draft")
     {}
 };
 

@@ -19,7 +19,7 @@ class AsyncPdfProcessor : public QObject {
     Q_OBJECT
 public:
     struct ProcessingResult {
-        bool success;
+        bool success = false;
         struct ExtractedFields {
             QString invoiceNumber;
             QString invoiceDate;
@@ -28,10 +28,10 @@ public:
             QString payeeName;
             QString payeeTaxId;
             QString projectName;
-            double amount;
-            double taxRate;
-            double taxAmount;
-            bool success;
+            double amount = 0.0;
+            double taxRate = 0.0;
+            double taxAmount = 0.0;
+            bool success = false;
             QString rawText;
         } fields;
         QString errorMessage;
@@ -47,7 +47,7 @@ public:
     QFuture<QPixmap> generatePreviewAsync(const QString& filePath, int maxWidth, int maxHeight);
 
 private:
-    ProcessingResult processPdf(const QString& filePath);
+    static ProcessingResult processPdf(const QString& filePath);
     static QPixmap generatePreview(const QString& filePath, int maxWidth, int maxHeight);
 };
 

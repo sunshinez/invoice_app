@@ -6,6 +6,8 @@
 #include <QFile>
 #include <QMessageBox>
 #include <QFrame>
+#include <QJsonObject>
+#include <QJsonDocument>
 
 InvoiceDetailWidget::InvoiceDetailWidget(InvoiceDatabase& database, AsyncPdfProcessor* processor, QWidget* parent)
     : QWidget(parent),
@@ -63,7 +65,7 @@ void InvoiceDetailWidget::setupUI() {
     detailContentLayout = new QVBoxLayout(detailContentWidget);
     detailContentLayout->setContentsMargins(40, 30, 40, 40);
 
-    QLabel* emptyLabel = new QLabel("从左侧选择一张发票查看详情");
+    emptyLabel = new QLabel("从左侧选择一张发票查看详情");
     emptyLabel->setAlignment(Qt::AlignCenter);
     emptyLabel->setStyleSheet("font-size: 16px; color: #86868B; margin-top: 100px;");
     detailContentLayout->addWidget(emptyLabel);
@@ -72,38 +74,9 @@ void InvoiceDetailWidget::setupUI() {
     layout->addWidget(detailScrollArea);
 }
 
-void InvoiceDetailWidget::updateView(const Invoice& invoice) {
-    currentInvoiceId = invoice.id;
-    currentFilePath = invoice.filePath;
-
-    // Clear existing content
-    QLayoutItem* child;
-    while ((child = detailContentLayout->takeAt(0)) != nullptr) {
-        if (child->widget()) {
-            delete child->widget();
-        }
-        delete child;
-    }
-
-    // Update header - only show invoice number
-    invoiceTitleLabel->setText(invoice.invoiceNumber);
-
-    // Display报销项目名称 in status label
-    QString projectDisplayText = invoice.projectName.isEmpty() ? "未分配项目" : invoice.projectName;
-    statusLabel->setText(projectDisplayText);
-
-    QString statusColor, statusBg;
-    if (invoice.projectName.isEmpty()) {
-        statusColor = "#8E8E93";
-        statusBg = "#E5E5EA";
-    } else {
-        statusColor = "#007AFF";
-        statusBg = "#E8F2FF";
-    }
-    statusLabel->setStyleSheet(QString("font-size: 10px; color: %1; background-color: %2; padding: 2px 8px; border-radius: 10px; font-weight: 500;").arg(statusColor).arg(statusBg));
-
-    // ===== PDF Preview Section =====
-    QFrame* pdfFrame = new QFrame;
+void InvoiceDetailWidget::setupEditableFields() {
+    // PDF Preview Section
+    pdfFrame = new QFrame;
     pdfFrame->setStyleSheet("background-color: white; border: none; border-radius: 8px;");
     QVBoxLayout* pdfLayout = new QVBoxLayout(pdfFrame);
     pdfLayout->setContentsMargins(16, 16, 16, 16);
@@ -112,47 +85,18 @@ void InvoiceDetailWidget::updateView(const Invoice& invoice) {
     pdfTitle->setStyleSheet("font-size: 14px; font-weight: bold; color: #1D1D1F; margin-bottom: 8px;");
     pdfLayout->addWidget(pdfTitle);
 
-    // PDF preview label
     pdfPreviewLabel = new QLabel;
     pdfPreviewLabel->setMinimumHeight(400);
     pdfPreviewLabel->setAlignment(Qt::AlignCenter);
     pdfPreviewLabel->setStyleSheet("background-color: #F6F6F6; border: none;");
-
-    // Try to generate PDF preview asynchronously
-    if (!currentFilePath.isEmpty() && QFile::exists(currentFilePath)) {
-        pdfPreviewLabel->setText("正在生成预览...");
-
-        int maxWidth = detailScrollArea->width() - 100;
-        if (maxWidth < 400) maxWidth = 400;
-        int windowHeight = parentWidget() ? parentWidget()->height() : 800;
-        int dynamicMaxWidth = (windowHeight - 250) * 3 / 4;
-        if (dynamicMaxWidth < 400) dynamicMaxWidth = 400;
-        if (dynamicMaxWidth > 600) dynamicMaxWidth = 600;
-        if (maxWidth > dynamicMaxWidth) maxWidth = dynamicMaxWidth;
-        int maxHeight = 800;
-
-        QFuture<QPixmap> future = pdfProcessor->generatePreviewAsync(currentFilePath, maxWidth, maxHeight);
-        previewWatcher->setFuture(future);
-    } else {
-        pdfPreviewLabel->setText("PDF 文件不存在: " + currentFilePath);
-    }
-
     pdfLayout->addWidget(pdfPreviewLabel);
 
-    // Add open PDF button
-    QPushButton* openPdfButton = new QPushButton("用默认程序打开 PDF");
+    openPdfButton = new QPushButton("用默认程序打开 PDF");
     openPdfButton->setStyleSheet("background-color: #007AFF; color: white; border: none; border-radius: 6px; padding: 8px 16px; font-size: 13px;");
-    connect(openPdfButton, &QPushButton::clicked, [this, invoice]() {
-        if (!invoice.filePath.isEmpty() && QFile::exists(invoice.filePath)) {
-            QDesktopServices::openUrl(QUrl::fromLocalFile(invoice.filePath));
-        }
-    });
     pdfLayout->addWidget(openPdfButton, 0, Qt::AlignCenter);
 
-    detailContentLayout->addWidget(pdfFrame);
-
-    // ===== Editable Metadata Section =====
-    QFrame* metadataFrame = new QFrame;
+    // Metadata Section
+    metadataFrame = new QFrame;
     metadataFrame->setStyleSheet("background-color: white; border: none; border-radius: 8px;");
     QVBoxLayout* metadataLayout = new QVBoxLayout(metadataFrame);
     metadataLayout->setContentsMargins(24, 24, 24, 24);
@@ -166,31 +110,28 @@ void InvoiceDetailWidget::updateView(const Invoice& invoice) {
     formLayout->setLabelAlignment(Qt::AlignLeft);
     formLayout->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
 
-    editInvoiceNumber = new QLineEdit(invoice.invoiceNumber);
-    editInvoiceDate = new QLineEdit(invoice.invoiceDate);
-    editPayerName = new QLineEdit(invoice.payerName);
-    editPayerTaxId = new QLineEdit(invoice.payerTaxId);
-    editPayeeName = new QLineEdit(invoice.payeeName);
-    editPayeeTaxId = new QLineEdit(invoice.payeeTaxId);
-    editProjectName = new QLineEdit(invoice.invoiceProjectName);
+    editInvoiceNumber = new QLineEdit;
+    editInvoiceDate = new QLineEdit;
+    editPayerName = new QLineEdit;
+    editPayerTaxId = new QLineEdit;
+    editPayeeName = new QLineEdit;
+    editPayeeTaxId = new QLineEdit;
+    editProjectName = new QLineEdit;
 
     editAmount = new QDoubleSpinBox;
     editAmount->setMaximum(999999999.99);
     editAmount->setDecimals(2);
     editAmount->setPrefix("¥ ");
-    editAmount->setValue(invoice.amount);
 
     editTaxRate = new QDoubleSpinBox;
     editTaxRate->setMaximum(100);
     editTaxRate->setDecimals(2);
     editTaxRate->setSuffix("%");
-    editTaxRate->setValue(invoice.taxRate);
 
     editTaxAmount = new QDoubleSpinBox;
     editTaxAmount->setMaximum(999999.99);
     editTaxAmount->setDecimals(2);
     editTaxAmount->setPrefix("¥ ");
-    editTaxAmount->setValue(invoice.taxAmount);
 
     QString inputStyle = "QLineEdit, QDoubleSpinBox { background-color: #F6F6F6; border: none; border-radius: 6px; padding: 8px 12px; font-size: 13px; }"
                         "QLineEdit:focus, QDoubleSpinBox:focus { background-color: white; }";
@@ -223,9 +164,89 @@ void InvoiceDetailWidget::updateView(const Invoice& invoice) {
     saveButton->setCursor(Qt::PointingHandCursor);
     connect(saveButton, &QPushButton::clicked, this, &InvoiceDetailWidget::onSaveInvoiceChanges);
     metadataLayout->addWidget(saveButton, 0, Qt::AlignCenter);
+}
 
-    detailContentLayout->addWidget(metadataFrame);
-    detailContentLayout->addStretch();
+void InvoiceDetailWidget::updateView(const Invoice& invoice) {
+    currentInvoiceId = invoice.id;
+    currentFilePath = invoice.filePath;
+
+    // Cancel any pending preview request
+    if (previewWatcher->isRunning()) {
+        previewWatcher->cancel();
+        previewWatcher->waitForFinished();
+    }
+
+    // Hide empty label
+    if (emptyLabel) {
+        emptyLabel->hide();
+    }
+
+    // Create editable fields if not yet created
+    if (!pdfFrame) {
+        setupEditableFields();
+        detailContentLayout->addWidget(pdfFrame);
+        detailContentLayout->addWidget(metadataFrame);
+        detailContentLayout->addStretch();
+    }
+
+    // Update header
+    invoiceTitleLabel->setText(invoice.invoiceNumber);
+
+    QString projectDisplayText = invoice.projectName.isEmpty() ? "未分配项目" : invoice.projectName;
+    statusLabel->setText(projectDisplayText);
+
+    QString statusColor, statusBg;
+    if (invoice.projectName.isEmpty()) {
+        statusColor = "#8E8E93";
+        statusBg = "#E5E5EA";
+    } else {
+        statusColor = "#007AFF";
+        statusBg = "#E8F2FF";
+    }
+    statusLabel->setStyleSheet(QString("font-size: 10px; color: %1; background-color: %2; padding: 2px 8px; border-radius: 10px; font-weight: 500;").arg(statusColor).arg(statusBg));
+
+    // Update open PDF button connection
+    openPdfButton->disconnect();
+    connect(openPdfButton, &QPushButton::clicked, [this, invoice]() {
+        if (!invoice.filePath.isEmpty() && QFile::exists(invoice.filePath)) {
+            QDesktopServices::openUrl(QUrl::fromLocalFile(invoice.filePath));
+        }
+    });
+
+    pdfPreviewLabel->setText("正在生成预览...");
+
+    // Try to generate PDF preview asynchronously
+    if (!currentFilePath.isEmpty() && QFile::exists(currentFilePath)) {
+        int maxWidth = detailScrollArea->width() - 100;
+        if (maxWidth < 400) maxWidth = 400;
+        int windowHeight = parentWidget() ? parentWidget()->height() : 800;
+        int dynamicMaxWidth = (windowHeight - 250) * 3 / 4;
+        if (dynamicMaxWidth < 400) dynamicMaxWidth = 400;
+        if (dynamicMaxWidth > 600) dynamicMaxWidth = 600;
+        if (maxWidth > dynamicMaxWidth) maxWidth = dynamicMaxWidth;
+        int maxHeight = 800;
+
+        QFuture<QPixmap> future = pdfProcessor->generatePreviewAsync(currentFilePath, maxWidth, maxHeight);
+        previewWatcher->setFuture(future);
+    } else {
+        pdfPreviewLabel->setText("PDF 文件不存在: " + currentFilePath);
+    }
+
+    // Update editable fields
+    editInvoiceNumber->setText(invoice.invoiceNumber);
+    editInvoiceDate->setText(invoice.invoiceDate);
+    editPayerName->setText(invoice.payerName);
+    editPayerTaxId->setText(invoice.payerTaxId);
+    editPayeeName->setText(invoice.payeeName);
+    editPayeeTaxId->setText(invoice.payeeTaxId);
+    editProjectName->setText(invoice.invoiceProjectName);
+    editAmount->setValue(invoice.amount);
+    editTaxRate->setValue(invoice.taxRate);
+    editTaxAmount->setValue(invoice.taxAmount);
+
+    // Show widgets
+    pdfFrame->show();
+    metadataFrame->show();
 
     detailScrollArea->verticalScrollBar()->setValue(0);
 }
@@ -237,31 +258,36 @@ void InvoiceDetailWidget::clearView() {
     statusLabel->setText("");
     statusLabel->setStyleSheet("font-size: 10px; color: transparent; background-color: transparent; padding: 2px 8px; border-radius: 10px; font-weight: 500;");
 
-    QLayoutItem* child;
-    while ((child = detailContentLayout->takeAt(0)) != nullptr) {
-        if (child->widget()) {
-            delete child->widget();
-        }
-        delete child;
+    // Cancel any pending preview request
+    if (previewWatcher->isRunning()) {
+        previewWatcher->cancel();
+        previewWatcher->waitForFinished();
     }
 
-    QLabel* emptyLabel = new QLabel("从左侧选择一张发票查看详情");
-    emptyLabel->setAlignment(Qt::AlignCenter);
-    emptyLabel->setStyleSheet("font-size: 16px; color: #86868B; margin-top: 100px;");
-    detailContentLayout->addWidget(emptyLabel);
+    // Hide editable fields, show empty label
+    if (pdfFrame) {
+        pdfFrame->hide();
+    }
+    if (metadataFrame) {
+        metadataFrame->hide();
+    }
+    if (emptyLabel) {
+        emptyLabel->show();
+    }
 }
 
 void InvoiceDetailWidget::onSaveInvoiceChanges() {
     if (currentInvoiceId <= 0) return;
 
-    Invoice invoice = db.getInvoiceById(currentInvoiceId);
+    Invoice invoice = db.invoiceById(currentInvoiceId);
     if (invoice.id <= 0) return;
 
-    QString beforeJson = QString("{\"invoice_number\":\"%1\",\"payer_name\":\"%2\",\"payee_name\":\"%3\",\"amount\":%4}")
-                         .arg(invoice.invoiceNumber)
-                         .arg(invoice.payerName)
-                         .arg(invoice.payeeName)
-                         .arg(invoice.amount);
+    QJsonObject beforeObj;
+    beforeObj["invoice_number"] = invoice.invoiceNumber;
+    beforeObj["payer_name"] = invoice.payerName;
+    beforeObj["payee_name"] = invoice.payeeName;
+    beforeObj["amount"] = invoice.amount;
+    QString beforeJson = QString::fromUtf8(QJsonDocument(beforeObj).toJson(QJsonDocument::Compact));
 
     invoice.invoiceNumber = editInvoiceNumber->text();
     invoice.invoiceDate = editInvoiceDate->text();
@@ -276,11 +302,12 @@ void InvoiceDetailWidget::onSaveInvoiceChanges() {
 
     QString errorMsg;
     if (db.updateInvoiceFull(invoice, &errorMsg)) {
-        QString afterJson = QString("{\"invoice_number\":\"%1\",\"payer_name\":\"%2\",\"payee_name\":\"%3\",\"amount\":%4}")
-                          .arg(invoice.invoiceNumber)
-                          .arg(invoice.payerName)
-                          .arg(invoice.payeeName)
-                          .arg(invoice.amount);
+        QJsonObject afterObj;
+        afterObj["invoice_number"] = invoice.invoiceNumber;
+        afterObj["payer_name"] = invoice.payerName;
+        afterObj["payee_name"] = invoice.payeeName;
+        afterObj["amount"] = invoice.amount;
+        QString afterJson = QString::fromUtf8(QJsonDocument(afterObj).toJson(QJsonDocument::Compact));
         db.logAudit("invoice", invoice.id, "update", beforeJson, afterJson, "success", "");
 
         QMessageBox::information(this, "保存成功", "发票信息已更新。");
@@ -293,6 +320,10 @@ void InvoiceDetailWidget::onSaveInvoiceChanges() {
 }
 
 void InvoiceDetailWidget::onPreviewCompleted() {
+    if (previewWatcher->isCanceled()) {
+        return;
+    }
+
     QPixmap pixmap = previewWatcher->result();
 
     if (!pixmap.isNull() && pdfPreviewLabel) {

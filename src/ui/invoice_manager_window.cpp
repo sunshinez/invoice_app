@@ -6,6 +6,12 @@ InvoiceManagerWindow::InvoiceManagerWindow(QWidget* parent) : QMainWindow(parent
     pdfProcessor(new AsyncPdfProcessor(this)),
     importWatcher(new QFutureWatcher<AsyncPdfProcessor::ProcessingResult>(this)),
     progressDialog(nullptr) {
+    if (!db.initialize()) {
+        QMessageBox::critical(this, "数据库错误", "无法初始化数据库，应用程序将退出。");
+        QTimer::singleShot(0, this, &QWidget::close);
+        return;
+    }
+
     setupUI();
 
     connect(importWatcher, &QFutureWatcher<AsyncPdfProcessor::ProcessingResult>::finished,
@@ -42,7 +48,7 @@ void InvoiceManagerWindow::setupUI() {
     // List signals
     connect(listWidget, &InvoiceListWidget::invoiceClicked, this, [this](int id) {
         currentInvoiceId = id;
-        Invoice inv = db.getInvoiceById(id);
+        Invoice inv = db.invoiceById(id);
         detailWidget->updateView(inv);
     });
 
@@ -143,6 +149,12 @@ void InvoiceManagerWindow::setupUI() {
 void InvoiceManagerWindow::onImportClicked() {
     qDebug() << "Import button clicked";
 
+    // Prevent concurrent imports
+    if (importWatcher->isRunning()) {
+        QMessageBox::information(this, "导入中", "正在处理导入请求，请稍候。");
+        return;
+    }
+
     QFileDialog dialog(this, "选择发票文件", QDir::homePath(),
                       "PDF文件 (*.pdf);;OFD文件 (*.ofd);;所有文件 (*)");
     dialog.setFileMode(QFileDialog::ExistingFile);
@@ -171,10 +183,13 @@ void InvoiceManagerWindow::onImportClicked() {
     }
 
     QString storageDir = getStorageDirectory();
-    QDir().mkpath(storageDir);
+    if (!QDir().mkpath(storageDir)) {
+        QMessageBox::critical(this, "导入失败", "无法创建存储目录。");
+        return;
+    }
 
     QString uniqueId = QUuid::createUuid().toString(QUuid::WithoutBraces);
-    QString destFileName = QString("%1.%2").arg(uniqueId, extension);
+    QString destFileName = QString("%1_%2.pdf").arg(uniqueId).arg(extension);
     QString destPath = storageDir + "/" + destFileName;
 
     if (!QFile::copy(filePath, destPath)) {
@@ -223,7 +238,7 @@ void InvoiceManagerWindow::onImportCompleted() {
     }
 
     if (db.invoiceExists(fields.invoiceNumber)) {
-        Invoice existing = db.getInvoiceByInvoiceNumber(fields.invoiceNumber);
+        Invoice existing = db.invoiceByInvoiceNumber(fields.invoiceNumber);
         QString msg = QString("发票号码 %1 已经存在于系统中，无法重复导入。\n\n"
                               "已存在发票信息：\n"
                               "- 付款方：%2\n"
@@ -259,7 +274,7 @@ void InvoiceManagerWindow::onImportCompleted() {
     if (db.addInvoice(invoice, &newInvoiceId)) {
         db.logAudit("invoice", newInvoiceId, "import", "", "", "success", "PDF imported successfully");
 
-        QList<QPair<int, QString>> projects = db.getAllProjects();
+        auto projects = db.allProjects();
         if (!projects.isEmpty()) {
             QMessageBox::StandardButton reply = QMessageBox::question(this, "导入成功",
                 "发票已成功导入系统。\n\n是否要将此发票分配到报销项目？",
@@ -300,7 +315,7 @@ void InvoiceManagerWindow::onExportClicked() {
 
     if (inSelectionMode && !selectedIds.isEmpty()) {
         for (int id : selectedIds) {
-            Invoice inv = db.getInvoiceById(id);
+            Invoice inv = db.invoiceById(id);
             if (inv.id > 0) {
                 invoicesToExport.append(inv);
             }
@@ -312,9 +327,9 @@ void InvoiceManagerWindow::onExportClicked() {
         if (reply == QMessageBox::No) {
             return;
         }
-        invoicesToExport = db.getInvoicesByProjectId(selectedProjectId);
+        invoicesToExport = db.invoicesByProjectId(selectedProjectId);
     } else {
-        invoicesToExport = db.getInvoicesByProjectId(selectedProjectId);
+        invoicesToExport = db.invoicesByProjectId(selectedProjectId);
     }
 
     if (invoicesToExport.isEmpty()) {
@@ -353,6 +368,10 @@ void InvoiceManagerWindow::exportInvoicesToPdf(const QList<Invoice>& invoices, c
     pdfWriter.setResolution(150);
 
     QPainter painter(&pdfWriter);
+    if (!painter.isActive()) {
+        QMessageBox::critical(this, "导出失败", "无法创建PDF文件，请检查文件路径和权限。");
+        return;
+    }
     painter.setRenderHint(QPainter::Antialiasing);
 
     const int pageWidth = 1240;
@@ -422,7 +441,7 @@ QPixmap InvoiceManagerWindow::renderPdfPageToPixmap(const QString& pdfPath, cons
     }
 
     QString tempFileName = QString("invoice_export_%1_%2")
-        .arg(QDateTime::currentDateTime().toString("yyyyMMddhhmmss"))
+        .arg(QDateTime::currentDateTimeUtc().toString("yyyyMMddhhmmss"))
         .arg(QRandomGenerator::global()->generate() % 10000);
     QString tempPngPath = QDir::tempPath() + "/" + tempFileName + ".png";
 
@@ -439,14 +458,23 @@ QPixmap InvoiceManagerWindow::renderPdfPageToPixmap(const QString& pdfPath, cons
     process.setWorkingDirectory(QDir::tempPath());
     process.start("pdftoppm", args);
 
+    if (process.error() == QProcess::FailedToStart) {
+        qDebug() << "pdftoppm failed to start";
+        QFile::remove(tempPngPath);
+        return createPlaceholderPixmap(targetSize, "无法启动转换工具");
+    }
+
     if (!process.waitForFinished(30000)) {
         qDebug() << "pdftoppm timeout or error:" << process.errorString();
         process.kill();
+        process.waitForFinished(5000);
+        QFile::remove(tempPngPath);
         return createPlaceholderPixmap(targetSize, "处理超时");
     }
 
     if (process.exitCode() != 0) {
         qDebug() << "pdftoppm failed:" << process.readAllStandardError();
+        QFile::remove(tempPngPath);
         return createPlaceholderPixmap(targetSize, "转换失败");
     }
 
@@ -497,7 +525,7 @@ QPixmap InvoiceManagerWindow::createPlaceholderPixmap(const QSize& size, const Q
 }
 
 void InvoiceManagerWindow::onDeleteInvoice(int invoiceId) {
-    Invoice invoice = db.getInvoiceById(invoiceId);
+    Invoice invoice = db.invoiceById(invoiceId);
     if (invoice.id <= 0) {
         QMessageBox::warning(this, "删除失败", "无法获取发票信息。");
         return;
@@ -542,7 +570,7 @@ void InvoiceManagerWindow::onDeleteInvoice(int invoiceId) {
 }
 
 void InvoiceManagerWindow::onAssignProjectToInvoice(int invoiceId) {
-    QList<QPair<int, QString>> projects = db.getAllProjects();
+    auto projects = db.allProjects();
     if (projects.isEmpty()) {
         QMessageBox::information(this, "提示", "暂无可用项目，请先创建项目。");
         return;
@@ -555,7 +583,7 @@ void InvoiceManagerWindow::onAssignProjectToInvoice(int invoiceId) {
             if (db.assignInvoiceToProject(invoiceId, selectedProjectId)) {
                 listWidget->refreshInvoiceList(selectedProjectId);
                 if (currentInvoiceId == invoiceId) {
-                    Invoice inv = db.getInvoiceById(invoiceId);
+                    Invoice inv = db.invoiceById(invoiceId);
                     detailWidget->updateView(inv);
                 }
             } else {

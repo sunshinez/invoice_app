@@ -21,10 +21,10 @@ public:
     InvoiceDatabase();
     ~InvoiceDatabase();
 
-    bool initDatabase();
+    bool initialize();
 
     // ========== Schema Version & Migration Management ==========
-    int getCurrentSchemaVersion();
+    int currentSchemaVersion();
     bool createSchemaVersionTable();
     bool updateSchemaVersion(int version, const QString& description);
     bool backupDatabase();
@@ -45,15 +45,15 @@ public:
 
     // ========== 项目管理方法 ==========
     bool addProject(const QString& name);
-    QList<QPair<int, QString>> getAllProjects();
+    QList<std::pair<int, QString>> allProjects();
     bool renameProject(int id, const QString& newName);
     bool deleteProject(int id);
     bool isProjectNameExists(const QString& name, int excludeId = -1);
 
     // ========== 发票管理方法 ==========
     bool addInvoice(const Invoice& invoice, int* newId = nullptr);
-    QList<Invoice> getAllInvoices();
-    Invoice getInvoiceById(int id);
+    QList<Invoice> allInvoices();
+    Invoice invoiceById(int id);
 
     // Validate invoice before save
     struct ValidationResult {
@@ -74,19 +74,25 @@ public:
     bool deleteInvoice(int id);
 
     bool invoiceExists(const QString& invoiceNumber);
-    Invoice getInvoiceByInvoiceNumber(const QString& invoiceNumber);
+    Invoice invoiceByInvoiceNumber(const QString& invoiceNumber);
 
     // 按项目ID获取发票列表
-    QList<Invoice> getInvoicesByProjectId(int projectId);
+    QList<Invoice> invoicesByProjectId(int projectId);
 
     // 更新发票的项目分配（使用项目ID）
     bool assignInvoiceToProject(int invoiceId, int projectId);
 
     // 获取项目ID通过名称
-    int getProjectIdByName(const QString& projectName);
+    int projectIdByName(const QString& projectName);
+
+    bool isInitialized() const { return initialized; }
 
 private:
+    bool initDatabase();
+    Invoice invoiceFromQuery(const QSqlQuery& query);
+
     QSqlDatabase db;
+    bool initialized = false;
 };
 
 #endif // INVOICE_DATABASE_H

@@ -1,19 +1,33 @@
 #include "invoice_database.h"
 
 InvoiceDatabase::InvoiceDatabase() {
-    initDatabase();
 }
 
 InvoiceDatabase::~InvoiceDatabase() {
     if (db.isOpen()) {
         db.close();
     }
+    QString connName = db.connectionName();
+    if (!connName.isEmpty()) {
+        QSqlDatabase::removeDatabase(connName);
+    }
+}
+
+bool InvoiceDatabase::initialize() {
+    if (initialized) {
+        return true;
+    }
+    initialized = initDatabase();
+    return initialized;
 }
 
 bool InvoiceDatabase::initDatabase() {
     db = QSqlDatabase::addDatabase("QSQLITE");
     QString dbPath = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
-    QDir().mkpath(dbPath);
+    if (!QDir().mkpath(dbPath)) {
+        qDebug() << "Failed to create database directory:" << dbPath;
+        return false;
+    }
     db.setDatabaseName(dbPath + "/invoices.db");
 
     if (!db.open()) {
@@ -24,13 +38,19 @@ bool InvoiceDatabase::initDatabase() {
     return createTables();
 }
 
-int InvoiceDatabase::getCurrentSchemaVersion() {
+int InvoiceDatabase::currentSchemaVersion() {
     QSqlQuery query;
-    query.exec("SELECT name FROM sqlite_master WHERE type='table' AND name='schema_version'");
+    if (!query.exec("SELECT name FROM sqlite_master WHERE type='table' AND name='schema_version'")) {
+        qDebug() << "Failed to check schema_version table existence:" << query.lastError().text();
+        return 0;
+    }
     if (!query.next()) {
         return 0;
     }
-    query.exec("SELECT version FROM schema_version ORDER BY updated_at DESC LIMIT 1");
+    if (!query.exec("SELECT version FROM schema_version ORDER BY updated_at DESC LIMIT 1")) {
+        qDebug() << "Failed to query schema version:" << query.lastError().text();
+        return 0;
+    }
     if (query.next()) {
         return query.value(0).toInt();
     }
@@ -74,18 +94,18 @@ bool InvoiceDatabase::backupDatabase() {
     }
 
     QString backupDir = dbFile.dir().absolutePath();
-    QString timestamp = QDateTime::currentDateTime().toString("yyyyMMdd_HHmmss");
+    QString timestamp = QDateTime::currentDateTimeUtc().toString("yyyyMMdd_HHmmss");
     QString backupName = QString("invoices.db.bak_%1").arg(timestamp);
     QString backupPath = backupDir + "/" + backupName;
 
-    QString dbName = db.connectionName();
-    db.close();
+    // Use SQLite online backup via VACUUM INTO (SQLite 3.27+) or file copy with checkpoint
+    // First checkpoint WAL to ensure all data is in the main file
+    QSqlQuery checkpointQuery;
+    if (!checkpointQuery.exec("PRAGMA wal_checkpoint(TRUNCATE)")) {
+        qDebug() << "[Backup] WAL checkpoint failed:" << checkpointQuery.lastError().text();
+    }
 
     bool success = QFile::copy(dbPath, backupPath);
-
-    db = QSqlDatabase::addDatabase("QSQLITE", dbName);
-    db.setDatabaseName(dbPath);
-    db.open();
 
     if (success) {
         qDebug() << "[Backup] Database backed up to:" << backupPath;
@@ -100,7 +120,10 @@ bool InvoiceDatabase::migrateV1_AddProjectId() {
 
     QSqlQuery query;
 
-    query.exec("PRAGMA table_info(invoices)");
+    if (!query.exec("PRAGMA table_info(invoices)")) {
+        qDebug() << "[Migration V1] Failed to get table info:" << query.lastError().text();
+        return false;
+    }
     bool hasProjectId = false;
     bool hasProjectName = false;
     while (query.next()) {
@@ -145,7 +168,7 @@ bool InvoiceDatabase::migrateV1_AddProjectId() {
                                 "project_id INTEGER, "
                                 "invoice_project_name TEXT, "
                                 "amount REAL, "
-                                "tax_rate TEXT, "
+                                "tax_rate REAL, "
                                 "tax_amount REAL, "
                                 "file_path TEXT, "
                                 "import_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP, "
@@ -168,9 +191,13 @@ bool InvoiceDatabase::migrateV1_AddProjectId() {
             throw QString("Failed to copy data: %1").arg(query.lastError().text());
         }
 
-        query.exec("SELECT COUNT(*) FROM invoices");
+        if (!query.exec("SELECT COUNT(*) FROM invoices")) {
+            throw QString("Failed to count old table: %1").arg(query.lastError().text());
+        }
         int oldCount = query.next() ? query.value(0).toInt() : 0;
-        query.exec("SELECT COUNT(*) FROM invoices_new");
+        if (!query.exec("SELECT COUNT(*) FROM invoices_new")) {
+            throw QString("Failed to count new table: %1").arg(query.lastError().text());
+        }
         int newCount = query.next() ? query.value(0).toInt() : 0;
 
         if (oldCount != newCount) {
@@ -206,10 +233,10 @@ bool InvoiceDatabase::migrateV1_AddProjectId() {
 }
 
 bool InvoiceDatabase::runMigrations() {
-    int currentVersion = getCurrentSchemaVersion();
-    qDebug() << "[Migration] Current schema version:" << currentVersion;
+    int version = currentSchemaVersion();
+    qDebug() << "[Migration] Current schema version:" << version;
 
-    if (currentVersion < 1) {
+    if (version < 1) {
         if (!migrateV1_AddProjectId()) {
             return false;
         }
@@ -240,8 +267,12 @@ bool InvoiceDatabase::createAuditLogTable() {
         return false;
     }
 
-    query.exec("CREATE INDEX idx_audit_logs_entity ON audit_logs(entity_type, entity_id)");
-    query.exec("CREATE INDEX idx_audit_logs_created_at ON audit_logs(created_at)");
+    if (!query.exec("CREATE INDEX idx_audit_logs_entity ON audit_logs(entity_type, entity_id)")) {
+        qDebug() << "Warning: Failed to create audit_logs entity index:" << query.lastError().text();
+    }
+    if (!query.exec("CREATE INDEX idx_audit_logs_created_at ON audit_logs(created_at)")) {
+        qDebug() << "Warning: Failed to create audit_logs created_at index:" << query.lastError().text();
+    }
 
     return true;
 }
@@ -284,7 +315,7 @@ bool InvoiceDatabase::createTables() {
                   "project_id INTEGER, "
                   "invoice_project_name TEXT, "
                   "amount REAL, "
-                  "tax_rate TEXT, "
+                  "tax_rate REAL, "
                   "tax_amount REAL, "
                   "file_path TEXT, "
                   "import_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP, "
@@ -297,8 +328,12 @@ bool InvoiceDatabase::createTables() {
         return false;
     }
 
-    query.exec("CREATE INDEX idx_invoices_project_id ON invoices(project_id)");
-    query.exec("CREATE INDEX idx_invoices_invoice_number ON invoices(invoice_number)");
+    if (!query.exec("CREATE INDEX idx_invoices_project_id ON invoices(project_id)")) {
+        qDebug() << "Warning: Failed to create project_id index:" << query.lastError().text();
+    }
+    if (!query.exec("CREATE INDEX idx_invoices_invoice_number ON invoices(invoice_number)")) {
+        qDebug() << "Warning: Failed to create invoice_number index:" << query.lastError().text();
+    }
 
     if (!createProjectsTable()) {
         return false;
@@ -345,14 +380,14 @@ bool InvoiceDatabase::addProject(const QString& name) {
     return true;
 }
 
-QList<QPair<int, QString>> InvoiceDatabase::getAllProjects() {
-    QList<QPair<int, QString>> projects;
+QList<std::pair<int, QString>> InvoiceDatabase::allProjects() {
+    QList<std::pair<int, QString>> projects;
     QSqlQuery query("SELECT id, name FROM projects ORDER BY created_at ASC");
 
     while (query.next()) {
         int id = query.value("id").toInt();
         QString name = query.value("name").toString();
-        projects.append(qMakePair(id, name));
+        projects.append(std::make_pair(id, name));
     }
 
     return projects;
@@ -417,7 +452,7 @@ bool InvoiceDatabase::addInvoice(const Invoice& invoice, int* newId) {
     query.bindValue(":project_id", invoice.projectId > 0 ? invoice.projectId : QVariant());
     query.bindValue(":invoice_project_name", invoice.invoiceProjectName);
     query.bindValue(":amount", invoice.amount);
-    query.bindValue(":tax_rate", QString("%1%").arg(invoice.taxRate));
+    query.bindValue(":tax_rate", invoice.taxRate);
     query.bindValue(":tax_amount", invoice.taxAmount);
     query.bindValue(":file_path", invoice.filePath);
     query.bindValue(":status", invoice.status);
@@ -434,61 +469,46 @@ bool InvoiceDatabase::addInvoice(const Invoice& invoice, int* newId) {
     return true;
 }
 
-QList<Invoice> InvoiceDatabase::getAllInvoices() {
+Invoice InvoiceDatabase::invoiceFromQuery(const QSqlQuery& query) {
+    Invoice inv;
+    inv.id = query.value("id").toInt();
+    inv.invoiceNumber = query.value("invoice_number").toString();
+    inv.invoiceDate = query.value("invoice_date").toString();
+    inv.payerName = query.value("payer_name").toString();
+    inv.payerTaxId = query.value("payer_tax_id").toString();
+    inv.payeeName = query.value("payee_name").toString();
+    inv.payeeTaxId = query.value("payee_tax_id").toString();
+    inv.projectId = query.value("project_id").toInt();
+    inv.projectName = query.value("project_name_display").toString();
+    inv.invoiceProjectName = query.value("invoice_project_name").toString();
+    inv.amount = query.value("amount").toDouble();
+    inv.taxRate = query.value("tax_rate").toDouble();
+    inv.taxAmount = query.value("tax_amount").toDouble();
+    inv.filePath = query.value("file_path").toString();
+    inv.importDate = query.value("import_date").toDateTime();
+    inv.status = query.value("status").toString();
+    return inv;
+}
+
+QList<Invoice> InvoiceDatabase::allInvoices() {
     QList<Invoice> invoices;
     QSqlQuery query("SELECT i.*, p.name AS project_name_display FROM invoices i LEFT JOIN projects p ON i.project_id = p.id ORDER BY i.import_date DESC");
 
     while (query.next()) {
-        Invoice inv;
-        inv.id = query.value("id").toInt();
-        inv.invoiceNumber = query.value("invoice_number").toString();
-        inv.invoiceDate = query.value("invoice_date").toString();
-        inv.payerName = query.value("payer_name").toString();
-        inv.payerTaxId = query.value("payer_tax_id").toString();
-        inv.payeeName = query.value("payee_name").toString();
-        inv.payeeTaxId = query.value("payee_tax_id").toString();
-        inv.projectId = query.value("project_id").toInt();
-        inv.projectName = query.value("project_name_display").toString();
-        inv.invoiceProjectName = query.value("invoice_project_name").toString();
-        inv.amount = query.value("amount").toDouble();
-        QString taxRateStr = query.value("tax_rate").toString();
-        taxRateStr.remove('%');
-        inv.taxRate = taxRateStr.toDouble();
-        inv.taxAmount = query.value("tax_amount").toDouble();
-        inv.filePath = query.value("file_path").toString();
-        inv.importDate = query.value("import_date").toDateTime();
-        inv.status = query.value("status").toString();
-        invoices.append(inv);
+        invoices.append(invoiceFromQuery(query));
     }
 
     return invoices;
 }
 
-Invoice InvoiceDatabase::getInvoiceById(int id) {
+Invoice InvoiceDatabase::invoiceById(int id) {
     Invoice inv;
     QSqlQuery query;
     query.prepare("SELECT i.*, p.name AS project_name_display FROM invoices i LEFT JOIN projects p ON i.project_id = p.id WHERE i.id = :id");
     query.bindValue(":id", id);
 
     if (query.exec() && query.next()) {
-        inv.id = query.value("id").toInt();
-        inv.invoiceNumber = query.value("invoice_number").toString();
-        inv.invoiceDate = query.value("invoice_date").toString();
-        inv.payerName = query.value("payer_name").toString();
-        inv.payerTaxId = query.value("payer_tax_id").toString();
-        inv.payeeName = query.value("payee_name").toString();
-        inv.payeeTaxId = query.value("payee_tax_id").toString();
-        inv.projectId = query.value("project_id").toInt();
-        inv.projectName = query.value("project_name_display").toString();
-        inv.invoiceProjectName = query.value("invoice_project_name").toString();
-        inv.amount = query.value("amount").toDouble();
-        QString taxRateStr = query.value("tax_rate").toString();
-        taxRateStr.remove('%');
-        inv.taxRate = taxRateStr.toDouble();
-        inv.taxAmount = query.value("tax_amount").toDouble();
-        inv.filePath = query.value("file_path").toString();
-        inv.importDate = query.value("import_date").toDateTime();
-        inv.status = query.value("status").toString();
+        inv = invoiceFromQuery(query);
     }
 
     return inv;
@@ -563,7 +583,7 @@ bool InvoiceDatabase::updateInvoiceFull(const Invoice& invoice, QString* errorMs
     query.bindValue(":project_id", invoice.projectId > 0 ? invoice.projectId : QVariant());
     query.bindValue(":invoice_project_name", invoice.invoiceProjectName);
     query.bindValue(":amount", invoice.amount);
-    query.bindValue(":tax_rate", QString("%1%").arg(invoice.taxRate));
+    query.bindValue(":tax_rate", invoice.taxRate);
     query.bindValue(":tax_amount", invoice.taxAmount);
     query.bindValue(":status", invoice.status);
 
@@ -587,7 +607,7 @@ bool InvoiceDatabase::updateInvoice(const Invoice& invoice) {
 }
 
 InvoiceDatabase::DeleteResult InvoiceDatabase::deleteInvoiceWithConsistency(int id) {
-    Invoice inv = getInvoiceById(id);
+    Invoice inv = invoiceById(id);
     if (inv.id <= 0) {
         return {false, "发票不存在", ""};
     }
@@ -647,37 +667,20 @@ bool InvoiceDatabase::invoiceExists(const QString& invoiceNumber) {
     return false;
 }
 
-Invoice InvoiceDatabase::getInvoiceByInvoiceNumber(const QString& invoiceNumber) {
+Invoice InvoiceDatabase::invoiceByInvoiceNumber(const QString& invoiceNumber) {
     Invoice inv;
     QSqlQuery query;
     query.prepare("SELECT i.*, p.name AS project_name_display FROM invoices i LEFT JOIN projects p ON i.project_id = p.id WHERE i.invoice_number = :invoice_number");
     query.bindValue(":invoice_number", invoiceNumber);
 
     if (query.exec() && query.next()) {
-        inv.id = query.value("id").toInt();
-        inv.invoiceNumber = query.value("invoice_number").toString();
-        inv.invoiceDate = query.value("invoice_date").toString();
-        inv.payerName = query.value("payer_name").toString();
-        inv.payerTaxId = query.value("payer_tax_id").toString();
-        inv.payeeName = query.value("payee_name").toString();
-        inv.payeeTaxId = query.value("payee_tax_id").toString();
-        inv.projectId = query.value("project_id").toInt();
-        inv.projectName = query.value("project_name_display").toString();
-        inv.invoiceProjectName = query.value("invoice_project_name").toString();
-        inv.amount = query.value("amount").toDouble();
-        QString taxRateStr = query.value("tax_rate").toString();
-        taxRateStr.remove('%');
-        inv.taxRate = taxRateStr.toDouble();
-        inv.taxAmount = query.value("tax_amount").toDouble();
-        inv.filePath = query.value("file_path").toString();
-        inv.importDate = query.value("import_date").toDateTime();
-        inv.status = query.value("status").toString();
+        inv = invoiceFromQuery(query);
     }
 
     return inv;
 }
 
-QList<Invoice> InvoiceDatabase::getInvoicesByProjectId(int projectId) {
+QList<Invoice> InvoiceDatabase::invoicesByProjectId(int projectId) {
     QList<Invoice> invoices;
     QSqlQuery query;
     query.prepare("SELECT i.*, p.name AS project_name_display FROM invoices i LEFT JOIN projects p ON i.project_id = p.id WHERE i.project_id = :project_id ORDER BY i.import_date DESC");
@@ -685,26 +688,7 @@ QList<Invoice> InvoiceDatabase::getInvoicesByProjectId(int projectId) {
 
     if (query.exec()) {
         while (query.next()) {
-            Invoice inv;
-            inv.id = query.value("id").toInt();
-            inv.invoiceNumber = query.value("invoice_number").toString();
-            inv.invoiceDate = query.value("invoice_date").toString();
-            inv.payerName = query.value("payer_name").toString();
-            inv.payerTaxId = query.value("payer_tax_id").toString();
-            inv.payeeName = query.value("payee_name").toString();
-            inv.payeeTaxId = query.value("payee_tax_id").toString();
-            inv.projectId = query.value("project_id").toInt();
-            inv.projectName = query.value("project_name_display").toString();
-            inv.invoiceProjectName = query.value("invoice_project_name").toString();
-            inv.amount = query.value("amount").toDouble();
-            QString taxRateStr = query.value("tax_rate").toString();
-            taxRateStr.remove('%');
-            inv.taxRate = taxRateStr.toDouble();
-            inv.taxAmount = query.value("tax_amount").toDouble();
-            inv.filePath = query.value("file_path").toString();
-            inv.importDate = query.value("import_date").toDateTime();
-            inv.status = query.value("status").toString();
-            invoices.append(inv);
+            invoices.append(invoiceFromQuery(query));
         }
     }
 
@@ -719,7 +703,7 @@ bool InvoiceDatabase::assignInvoiceToProject(int invoiceId, int projectId) {
     return query.exec();
 }
 
-int InvoiceDatabase::getProjectIdByName(const QString& projectName) {
+int InvoiceDatabase::projectIdByName(const QString& projectName) {
     QSqlQuery query;
     query.prepare("SELECT id FROM projects WHERE name = :name");
     query.bindValue(":name", projectName);

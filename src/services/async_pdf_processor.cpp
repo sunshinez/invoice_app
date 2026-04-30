@@ -3,7 +3,7 @@
 AsyncPdfProcessor::AsyncPdfProcessor(QObject* parent) : QObject(parent) {}
 
 QFuture<AsyncPdfProcessor::ProcessingResult> AsyncPdfProcessor::processPdfAsync(const QString& filePath) {
-    return QtConcurrent::run([this, filePath]() -> ProcessingResult {
+    return QtConcurrent::run([filePath]() -> ProcessingResult {
         return processPdf(filePath);
     });
 }
@@ -58,11 +58,22 @@ QPixmap AsyncPdfProcessor::generatePreview(const QString& filePath, int maxWidth
     args << "-png" << "-f" << "1" << "-l" << "1" << "-singlefile" << filePath << tempImageBase;
     process.start("pdftoppm", args);
 
+    if (process.error() == QProcess::FailedToStart) {
+        qDebug() << "pdftoppm failed to start";
+        return QPixmap();
+    }
+
     if (!process.waitForFinished(15000)) {
+        qDebug() << "pdftoppm process timeout";
+        process.kill();
+        process.waitForFinished(5000);
+        QFile::remove(tempImage);
         return QPixmap();
     }
 
     if (process.exitCode() != 0 || !QFile::exists(tempImage)) {
+        qDebug() << "pdftoppm failed with exit code:" << process.exitCode();
+        QFile::remove(tempImage);
         return QPixmap();
     }
 

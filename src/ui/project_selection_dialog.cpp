@@ -1,6 +1,6 @@
 #include "project_selection_dialog.h"
 
-ProjectSelectionDialog::ProjectSelectionDialog(const QList<QPair<int, QString>>& projects, QWidget* parent)
+ProjectSelectionDialog::ProjectSelectionDialog(const QList<std::pair<int, QString>>& projects, QWidget* parent)
     : QDialog(parent), allProjects(projects) {
     setWindowTitle("选择项目");
     setMinimumWidth(300);

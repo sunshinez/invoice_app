@@ -19,6 +19,7 @@
 #include <QPageSize>
 #include <QPixmap>
 #include <QSize>
+#include <QTimer>
 
 #include "../data/invoice_database.h"
 #include "../services/async_pdf_processor.h"

@@ -308,7 +308,9 @@ void SidebarWidget::refreshProjectsList() {
         delete child;
     }
 
-    QList<QPair<int, QString>> projects = db.getAllProjects();
+    selectedProjectButton = nullptr;
+
+    auto projects = db.allProjects();
 
     for (const auto& project : projects) {
         int projectId = project.first;

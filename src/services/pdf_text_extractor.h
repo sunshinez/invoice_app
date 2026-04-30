@@ -59,26 +59,28 @@ private:
     };
 
     QList<TextPosition> extractTextWithPositions(const QString& filePath);
-    TextPosition* findByText(QList<TextPosition>& positions, const QString& pattern,
-                              Qt::CaseSensitivity cs = Qt::CaseSensitive);
-    TextPosition* findNearest(QList<TextPosition>& positions, double x, double y,
-                               double radiusX = 50, double radiusY = 30);
-    QList<TextPosition> findInRegion(QList<TextPosition>& positions,
-                                      double x1, double y1, double x2, double y2);
-    TextPosition* findRightOf(QList<TextPosition>& positions, const TextPosition& ref,
-                               double maxDistance = 200, double yTolerance = 20);
-    TextPosition* findBelow(QList<TextPosition>& positions, const TextPosition& ref,
-                             double maxDistance = 100, double xTolerance = 100);
 
-    QString extractInvoiceNumberPosition(QList<TextPosition>& positions);
-    QString extractInvoiceDatePosition(QList<TextPosition>& positions);
-    QString extractPayerNamePosition(QList<TextPosition>& positions);
-    QString extractPayeeNamePosition(QList<TextPosition>& positions);
-    QString extractTaxIdPosition(QList<TextPosition>& positions, bool isBuyer);
-    QString extractProjectNamePosition(QList<TextPosition>& positions);
-    double extractAmountPosition(QList<TextPosition>& positions);
-    double extractTaxRatePosition(QList<TextPosition>& positions);
-    double extractTaxAmountPosition(QList<TextPosition>& positions);
+    int findByText(const QList<TextPosition>& positions, const QString& pattern,
+                   Qt::CaseSensitivity cs = Qt::CaseSensitive) const;
+    int findNearest(const QList<TextPosition>& positions, double x, double y,
+                     double radiusX = 50, double radiusY = 30) const;
+    QList<TextPosition> findInRegion(const QList<TextPosition>& positions,
+                                        double x1, double y1, double x2, double y2) const;
+    int findRightOf(const QList<TextPosition>& positions, const TextPosition& ref,
+                     double maxDistance = 200, double yTolerance = 20) const;
+    int findBelow(const QList<TextPosition>& positions, const TextPosition& ref,
+                   double maxDistance = 100, double xTolerance = 100) const;
+
+    QString extractInvoiceNumberPosition(const QList<TextPosition>& positions);
+    QString extractInvoiceDatePosition(const QList<TextPosition>& positions);
+    QString extractPayerNamePosition(const QList<TextPosition>& positions);
+    QString extractPayeeNamePosition(const QList<TextPosition>& positions);
+    QString extractPartyNamePosition(const QList<TextPosition>& positions, bool isBuyer);
+    QString extractTaxIdPosition(const QList<TextPosition>& positions, bool isBuyer);
+    QString extractProjectNamePosition(const QList<TextPosition>& positions);
+    double extractAmountPosition(const QList<TextPosition>& positions);
+    double extractTaxRatePosition(const QList<TextPosition>& positions);
+    double extractTaxAmountPosition(const QList<TextPosition>& positions, double knownAmount = 0.0, double knownTaxRate = 0.0);
     ExtractedFields extractWithPositions(const QString& filePath);
 };
 

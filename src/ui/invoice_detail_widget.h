@@ -38,6 +38,8 @@ private slots:
 
 private:
     void setupUI();
+    void setupEditableFields();
+    void updateEditableFields(const Invoice& invoice);
 
     InvoiceDatabase& db;
     AsyncPdfProcessor* pdfProcessor;
@@ -51,9 +53,15 @@ private:
     QScrollArea* detailScrollArea = nullptr;
     QWidget* detailContentWidget = nullptr;
     QVBoxLayout* detailContentLayout = nullptr;
+    QLabel* emptyLabel = nullptr;
 
     // PDF preview
     QLabel* pdfPreviewLabel = nullptr;
+    QFrame* pdfFrame = nullptr;
+    QPushButton* openPdfButton = nullptr;
+
+    // Metadata frame
+    QFrame* metadataFrame = nullptr;
 
     // Editable fields
     QLineEdit* editInvoiceNumber = nullptr;
